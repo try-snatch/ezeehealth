@@ -1,0 +1,119 @@
+{
+    "stages": [
+        {
+            "stage": "Positive Enquiry",
+            "heading": "Care Initiated",
+            "description": [
+                "{{patient_name}}'s speciality care journey has started."
+            ],
+            "sequence_number": 1
+        },
+        {
+            "stage": "Clinical Info Collected",
+            "heading": "Care Initiated",
+            "description": [
+                "Your Ezeehealth care executive is {{Patient Service Executive}}, Mobile: {{Patient Service Executive Mobile}}.",
+                "Your initial diagnosis is {{Provisional Diagnosis}}"
+            ],
+            "sequence_number": 2
+        },
+        {
+            "stage": "SSH Identified and Mapped",
+            "heading": "Registration",
+            "description": [
+                "You have been registed in {{Registered SSH}} "
+            ],
+            "sequence_number": 3
+        },
+        {
+            "stage": "Case forwarded to SSH",
+            "heading": "Registration",
+            "sequence_number": 4
+        },
+        {
+            "stage": "Response Shared with all",
+            "heading": "Hospitalisation",
+            "description": [],
+            "sequence_number": 5
+        },
+        {
+            "stage": "Bill raised for Registration & consultancy",
+            "heading": "Registration",
+            "description": [
+                "Patient Registration ID: {{Mapped Registrations}}",
+                "Registration charges are {{Patient Consultation/Admission Charge}}"
+            ],
+            "sequence_number": 6
+        },
+        {
+            "stage": "Payment Received for Reg & consultancy",
+            "heading": "Registration",
+            "description": [
+                "Payment for Rs {{Patient Registration/Admission Charges}} received on {{Payment Date}}"
+            ],
+            "sequence_number": 7
+        },
+        {
+            "stage": "Consultancy Scheduled with SSH",
+            "heading": "Hospitalisation",
+            "description": [
+                "Your consultation with doctor is scheduled on {{Appointment Date & Time}}"
+            ],
+            "sequence_number": 8
+        },
+        {
+            "stage": "Treatment Notes & Estimate received",
+            "heading": "Hospitalisation",
+            "description": [
+                "Identified treatment is {{Treatment}}"
+            ],
+            "sequence_number": 9
+        },
+        {
+            "stage": "Estimate Discussed with Patient",
+            "heading": "Hospitalisation",
+            "description": [],
+            "sequence_number": 10
+        },
+        {
+            "stage": "Patient gave Consent",
+            "heading": "Hospitalisation",
+            "description": [
+                "{{Patient Name}} has given consent to go ahead with the treatment"
+            ],
+            "sequence_number": 11
+        },
+        {
+            "stage": "Patient did not give consent",
+            "heading": "Treatment Cancelled",
+            "description": [
+                "{{Patient Name}} has not given consent"
+            ],
+            "sequence_number": 12
+        },
+        {
+            "stage": "Patient Admitted",
+            "heading": "Undergoing Treatment",
+            "description": [
+                "{{Patient Name}} admitted"
+            ],
+            "sequence_number": 13
+        },
+        {
+            "stage": "Patient Discharged",
+            "heading": "Discharge",
+            "description": [
+                "{{Patient Name}} discharged on {{Discharge Date}}"
+            ],
+            "sequence_number": 14
+        },
+        {
+            "stage": "Treatment Cancelled",
+            "heading": "Treatment Cancelled",
+            "description": [
+                "{{Patient Name}}'s treatment has been cancelled"
+            ],
+            "sequence_number": 15
+        }
+    ]
+}

@@ -1,0 +1,29 @@
+services:
+  db:
+    platform: linux/amd64
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-ezeehealth_unified}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    env_file:
+      - .env.prod
+    restart: unless-stoppe
+
+  backend:
+    platform: linux/amd64
+    image: 545581984494.dkr.ecr.ap-south-1.amazonaws.com/ezeehealth-unified-backend:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.prod
+    volumes:
+      - .env.prod:/app/.env.prod
+    depends_on:
+      - db
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
