@@ -709,6 +709,7 @@ class PatientDocumentDetailView(views.APIView):
 class PatientDocumentInsightView(views.APIView):
     """GET /api/patients/{pk}/documents/{doc_id}/insights/"""
     permission_classes = [IsAuthenticated]
+    _processing = set()  # tracks doc IDs with active background threads
 
     def get(self, request, pk, doc_id):
         user = request.user
@@ -725,6 +726,7 @@ class PatientDocumentInsightView(views.APIView):
         # Return cached insight if available
         try:
             insight = doc.insight
+            self._processing.discard(str(doc.id))
             return Response({
                 'title': insight.title,
                 'summary': insight.summary,
@@ -736,23 +738,36 @@ class PatientDocumentInsightView(views.APIView):
         except PatientDocumentInsight.DoesNotExist:
             pass
 
-        # Process synchronously
-        from .ai_service import process_document
-        process_document(doc.id)
+        # Already being processed in a background thread — just return 202
+        if str(doc.id) in self._processing:
+            return Response(
+                {"status": "processing", "message": "Document is being analyzed. Please check back shortly."},
+                status=status.HTTP_202_ACCEPTED,
+            )
 
-        try:
-            doc.refresh_from_db()
-            insight = doc.insight
-            return Response({
-                'title': insight.title,
-                'summary': insight.summary,
-                'key_findings': insight.key_findings,
-                'risk_flags': insight.risk_flags,
-                'tags': insight.tags,
-                'created_at': insight.created_at.isoformat(),
-            }, status=status.HTTP_200_OK)
-        except PatientDocumentInsight.DoesNotExist:
-            return Response({"error": "Failed to generate insights"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # If already processed but no insight exists, it failed — allow retry
+        if doc.ai_processed:
+            doc.ai_processed = False
+            doc.save(update_fields=['ai_processed'])
+
+        # Kick off processing in a background thread and return 202
+        from .ai_service import process_document
+        self._processing.add(str(doc.id))
+
+        def _run():
+            try:
+                process_document(doc.id)
+            except Exception:
+                logger.exception("Background process_document failed for doc %s", doc.id)
+            finally:
+                self._processing.discard(str(doc.id))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+        return Response(
+            {"status": "processing", "message": "Document is being analyzed. Please check back shortly."},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 # ============================================================================

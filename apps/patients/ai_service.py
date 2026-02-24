@@ -9,8 +9,26 @@ import logging
 import tempfile
 import json
 import base64
+import time
 
 logger = logging.getLogger(__name__)
+
+
+def _gemini_generate_with_retry(client, max_retries=3, **kwargs):
+    """Call client.models.generate_content with exponential backoff on 503/429."""
+    for attempt in range(max_retries + 1):
+        try:
+            return client.models.generate_content(**kwargs)
+        except Exception as e:
+            status = getattr(e, 'status_code', None) or getattr(e, 'code', None)
+            retryable = status in (429, 503) or '503' in str(e) or 'UNAVAILABLE' in str(e)
+            if retryable and attempt < max_retries:
+                wait = 2 ** attempt  # 1s, 2s, 4s
+                logger.warning("Gemini API %s (attempt %d/%d), retrying in %ds...",
+                               status or 'error', attempt + 1, max_retries + 1, wait)
+                time.sleep(wait)
+                continue
+            raise
 
 
 def _get_genai_client():
@@ -115,7 +133,8 @@ def _ocr_image_bytes(img_bytes):
         client = _get_genai_client()
         from google.genai import types
 
-        response = client.models.generate_content(
+        response = _gemini_generate_with_retry(
+            client,
             model='gemini-2.5-flash',
             contents=[
                 types.Part.from_text(text=
@@ -232,7 +251,8 @@ Document text:
 
 Return only valid JSON with no markdown fences or extra text."""
 
-        response = client.models.generate_content(
+        response = _gemini_generate_with_retry(
+            client,
             model='gemini-2.5-flash',
             contents=prompt,
         )
