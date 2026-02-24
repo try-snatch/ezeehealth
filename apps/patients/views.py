@@ -37,9 +37,11 @@ class PatientListCreateView(views.APIView):
 
                 # Get Zoho Deals (converted patients)
                 zoho_deals = ZohoService.get_patients(doc_mobile)
+                logger.info("PatientList: %d Zoho deals for %s", len(zoho_deals), doc_mobile)
 
                 # Get Zoho Leads (referred patients not yet converted)
                 zoho_leads = ZohoService.get_leads(doc_mobile)
+                logger.info("PatientList: %d Zoho leads for %s", len(zoho_leads), doc_mobile)
 
                 # Hide revenue if user can't view financial
                 if not user.can_view_financial:
@@ -63,9 +65,7 @@ class PatientListCreateView(views.APIView):
                 return Response(combined, status=status.HTTP_200_OK)
 
             except Exception as e:
-                print(f"Error fetching patients: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error("Error fetching patients: %s", e, exc_info=True)
                 return Response([], status=status.HTTP_200_OK)
 
         # For other roles, fallback to local DB
@@ -100,7 +100,7 @@ class PatientListCreateView(views.APIView):
                 if zoho_doc:
                     zoho_doctor_id = zoho_doc.get('id')
             except Exception as e:
-                print(f"Error fetching Zoho Doctor ID: {e}")
+                logger.error("Error fetching Zoho Doctor ID: %s", e)
 
             lead_data = {
                 'name': name,
@@ -204,7 +204,7 @@ class CreateReferralView(views.APIView):
             if zoho_doc:
                 zoho_doctor_id = zoho_doc.get('id')
         except Exception as e:
-            print(f"Error fetching Zoho Doctor ID: {e}")
+            logger.error("Error fetching Zoho Doctor ID: %s", e)
 
         lead_data = {
             'name': patient.full_name,
@@ -288,7 +288,7 @@ class DashboardStatsView(views.APIView):
                                 seen_headings.add(h)
                                 formatted_stats[h] = {"count": 0, "latest_date": ""}
                 except Exception as e:
-                    print(f"Error loading stages.json for dashboard: {e}")
+                        logger.error("Error loading stages.json for dashboard: %s", e)
 
                 # 2. Fetch Deals (converted patients)
                 patients = ZohoService.get_patients(doc_mobile)
@@ -353,9 +353,7 @@ class DashboardStatsView(views.APIView):
                     color_idx += 1
 
             except Exception as e:
-                print(f"Error fetching dashboard data from Zoho: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error("Error fetching dashboard data from Zoho: %s", e, exc_info=True)
                 overview_stats = {
                     "total_referred": 0, "total_converted": 0, "total_revenue": 0,
                     "total_opd": opd_count, "total_local_leads": local_referred_count,
