@@ -204,12 +204,21 @@ class VerifyOTPView(views.APIView):
 
         if cached_otp and cached_otp == otp:
             # OTP correct -> issue tokens
+            update_fields = []
+
             # mark 2FA enabled if not already
             if not user.is_2fa_enabled:
                 user.is_2fa_enabled = True
-                # set last_otp_sent_at to now so future throttling is accurate
                 user.last_otp_sent_at = timezone.now()
-                user.save(update_fields=['is_2fa_enabled', 'last_otp_sent_at'])
+                update_fields += ['is_2fa_enabled', 'last_otp_sent_at']
+
+            # Activate pending accounts (patient registration, staff setup)
+            if user.account_status == 'pending':
+                user.account_status = 'active'
+                update_fields.append('account_status')
+
+            if update_fields:
+                user.save(update_fields=update_fields)
 
             # cleanup both keys (unified + legacy)
             cache.delete(f"otp_2fa_{user.id}")

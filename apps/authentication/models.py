@@ -87,6 +87,25 @@ class User(AbstractUser):
     # Rate limiting
     last_email_sent_at = models.DateTimeField(null=True, blank=True)
 
+    # Patient-specific fields (nullable, only used when role='patient')
+    zoho_contact_id = models.CharField(max_length=100, blank=True, null=True, db_index=True,
+        help_text="Zoho Contact ID for patient users")
+    profile_completed = models.BooleanField(default=False,
+        help_text="Whether patient has completed initial profile setup")
+    is_corporate = models.BooleanField(default=False)
+    lead_source = models.CharField(max_length=50, blank=True, null=True)
+    company_name = models.CharField(max_length=255, blank=True, null=True)
+    gender = models.CharField(max_length=20, blank=True, null=True)
+    age_in_years = models.PositiveIntegerField(blank=True, null=True)
+    mailing_street = models.CharField(max_length=255, blank=True, null=True)
+    mailing_city = models.CharField(max_length=100, blank=True, null=True)
+    mailing_zip = models.CharField(max_length=20, blank=True, null=True)
+    mailing_state = models.CharField(max_length=100, blank=True, null=True)
+    primary_doctor_id = models.CharField(max_length=100, blank=True, null=True,
+        help_text="Zoho Doctor ID for patient's primary doctor")
+    doctor_email = models.EmailField(blank=True, null=True)
+    doctor_mobile = models.CharField(max_length=20, blank=True, null=True)
+
     USERNAME_FIELD = 'mobile'
     REQUIRED_FIELDS = []
 

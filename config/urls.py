@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import TemplateView
@@ -78,6 +78,9 @@ urlpatterns = [
     # Zoho Webhook (both URL patterns for compatibility)
     path('api/webhooks/zoho/', ZohoWebhookView.as_view(), name='zoho-webhook'),
     path('api/zoho/webhooks/', ZohoWebhookView.as_view(), name='zoho-webhook-alt'),
+
+    # Patient Portal
+    path('api/patient/', include('apps.patient_portal.urls')),
 
     # Shared Patient Documents
     path('api/patient-documents/', list_shared_documents, name='list-shared-documents'),
