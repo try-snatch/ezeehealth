@@ -1,11 +1,14 @@
 import requests
 import os
+import logging
 from django.utils import timezone
 from datetime import timedelta
 from pathlib import Path
 import json
 from django.conf import settings
 from .models import ZohoToken
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TOKEN_LIFETIME = 3600
 ACCOUNTS_URL = os.getenv("ZOHO_ACCOUNTS_URL", "https://accounts.zoho.in")
@@ -27,7 +30,7 @@ class ZohoService:
                 body = {"error": "non-json-response", "text": resp.text}
             return resp.status_code, body
         except Exception as e:
-            print(f"ERROR: Token endpoint unreachable: {e}")
+            logger.error("Token endpoint unreachable: %s", e)
             return None, {"error": "network_error", "exception": str(e)}
 
     @staticmethod
@@ -61,9 +64,9 @@ class ZohoService:
         status, body = ZohoService._post_token(payload)
         if status == 200 and "access_token" in body:
             ZohoService._save_token_from_response(zoho_token, body)
-            print("DEBUG: Refreshed access token via refresh_token.")
+            logger.info("Refreshed Zoho access token via refresh_token.")
             return zoho_token, None
-        print(f"ERROR: Refresh token flow failed. Status: {status}. Body: {body}")
+        logger.error("Refresh token flow failed. Status: %s. Body: %s", status, body)
         return None, body
 
     @staticmethod
@@ -171,10 +174,10 @@ class ZohoService:
         try:
             url = f"{API_DOMAIN}/crm/v8/Leads/{record_id}"
             response = requests.get(url, headers=ZohoService.get_headers(), timeout=10)
-            print(f"DEBUG: is_lead check for {record_id}: {response.status_code}")
+            logger.debug("is_lead check for %s: %s", record_id, response.status_code)
             return response.status_code == 200
         except Exception as e:
-            print(f"Error checking if record is lead: {e}")
+            logger.error("Error checking if record is lead %s: %s", record_id, e)
             return False
 
     @staticmethod
@@ -183,10 +186,10 @@ class ZohoService:
         try:
             url = f"{API_DOMAIN}/crm/v8/Deals/{record_id}"
             response = requests.get(url, headers=ZohoService.get_headers(), timeout=10)
-            print(f"DEBUG: is_deal check for {record_id}: {response.status_code}")
+            logger.debug("is_deal check for %s: %s", record_id, response.status_code)
             return response.status_code == 200
         except Exception as e:
-            print(f"Error checking if record is deal: {e}")
+            logger.error("Error checking if record is deal %s: %s", record_id, e)
             return False
 
     @staticmethod
@@ -222,9 +225,12 @@ class ZohoService:
                         "registration_no": doctor.get("Registration_No"),
                         "clinic_name": doctor.get("Clinic_Name")
                     }
+                logger.warning("search_doctor(%s): no doctor found in Zoho", mobile)
+            else:
+                logger.error("search_doctor(%s): Zoho returned %s — %s", mobile, response.status_code, response.text[:500])
             return None
         except Exception as e:
-            print(f"Error searching doctor: {e}")
+            logger.error("search_doctor(%s): exception — %s", mobile, e)
             return None
 
     @staticmethod
@@ -262,7 +268,7 @@ class ZohoService:
                 return None
 
         except Exception as e:
-            print(f"Error in create_or_update_doctor: {e}")
+            logger.error("Error in create_or_update_doctor: %s", e)
             return None
 
     # ==================== LEAD METHODS ====================
@@ -272,6 +278,7 @@ class ZohoService:
         """Fetch all Leads (referrals) for a doctor - Used for Dashboard"""
         doctor = ZohoService.search_doctor(doctor_mobile)
         if not doctor:
+            logger.warning("get_leads: no doctor found for mobile %s — returning empty leads", doctor_mobile)
             return []
 
         doctor_id = doctor['id']
@@ -285,6 +292,7 @@ class ZohoService:
 
             if response.status_code == 200:
                 data = response.json().get("data", [])
+                logger.info("get_leads: fetched %d leads from Zoho for doctor %s", len(data), doctor_mobile)
                 leads = []
 
                 for lead in data:
@@ -310,9 +318,10 @@ class ZohoService:
                     })
                 return leads
 
+            logger.error("get_leads: Zoho returned %s for doctor %s — %s", response.status_code, doctor_mobile, response.text[:500])
             return []
         except Exception as e:
-            print(f"Error fetching leads from Zoho: {e}")
+            logger.error("get_leads: exception for doctor %s — %s", doctor_mobile, e)
             return []
 
     @staticmethod
@@ -351,7 +360,7 @@ class ZohoService:
             return None
 
         except Exception as e:
-            print(f"Error creating lead in Zoho: {e}")
+            logger.error("Error creating lead in Zoho: %s", e)
             return None
 
     @staticmethod
@@ -366,7 +375,7 @@ class ZohoService:
                     return data[0]
             return None
         except Exception as e:
-            print(f"Error fetching lead {lead_id}: {e}")
+            logger.error("Error fetching lead %s: %s", lead_id, e)
             return None
 
     @staticmethod
@@ -401,13 +410,13 @@ class ZohoService:
                 deal_id = data.get("Deals")
                 if contact_id and deal_id:
                     return {"contact_id": contact_id, "deal_id": deal_id}
-                print(f"DEBUG: Lead conversion partial result: {data}")
+                logger.warning("Lead conversion partial result for %s: %s", lead_id, data)
                 return data if data else None
 
-            print(f"ERROR: Lead conversion failed: {response.status_code} {response.text}")
+            logger.error("Lead conversion failed for %s: %s %s", lead_id, response.status_code, response.text[:500])
             return None
         except Exception as e:
-            print(f"Error converting lead {lead_id}: {e}")
+            logger.error("Error converting lead %s: %s", lead_id, e)
             return None
 
     # ==================== DEAL/PATIENT METHODS ====================
@@ -417,6 +426,7 @@ class ZohoService:
         """Fetch all Deals (converted patients) for a doctor - Used for Patients Page"""
         doctor = ZohoService.search_doctor(doctor_mobile)
         if not doctor:
+            logger.warning("get_patients: no doctor found for mobile %s — returning empty deals", doctor_mobile)
             return []
 
         doctor_id = doctor['id']
@@ -430,6 +440,7 @@ class ZohoService:
 
             if response.status_code == 200:
                 data = response.json().get("data", [])
+                logger.info("get_patients: fetched %d deals from Zoho for doctor %s", len(data), doctor_mobile)
 
                 # Load stages mapping
                 stages_map = {}
@@ -440,7 +451,7 @@ class ZohoService:
                         for item in stages_data.get('stages', []):
                             stages_map[item['stage']] = item['heading']
                 except Exception as e:
-                    print(f"Error loading stages.json: {e}")
+                    logger.error("Error loading stages.json: %s", e)
 
                 patients = []
 
@@ -450,8 +461,6 @@ class ZohoService:
 
                     stage_name = deal.get("Stage")
                     mapped_status = stages_map.get(stage_name, stage_name)
-
-                    print(f'Deal: {deal}')
 
                     patients.append({
                         "id": deal.get("id"),
@@ -471,9 +480,10 @@ class ZohoService:
                 patients.sort(key=lambda x: x.get('date', ''), reverse=True)
                 return patients
 
+            logger.error("get_patients: Zoho returned %s for doctor %s — %s", response.status_code, doctor_mobile, response.text[:500])
             return []
         except Exception as e:
-            print(f"Error fetching patients from Zoho Deals: {e}")
+            logger.error("get_patients: exception for doctor %s — %s", doctor_mobile, e)
             return []
 
     @staticmethod
@@ -488,7 +498,7 @@ class ZohoService:
                     return data[0]
             return None
         except Exception as e:
-            print(f"Error fetching contact {contact_id}: {e}")
+            logger.error("Error fetching contact %s: %s", contact_id, e)
             return None
 
     @staticmethod
@@ -508,13 +518,13 @@ class ZohoService:
             payload = {"data": [record_data]}
             headers = ZohoService.get_headers()
             resp = requests.put(url, headers=headers, json=payload, timeout=10)
-            print(f'DEBUG: Zoho update response for {module}/{record_id}: {resp.json()}')
+            logger.debug("Zoho update response for %s/%s: %s", module, record_id, resp.json())
             if resp.status_code in [200, 201]:
                 return True
-            print(f"Zoho update_record failed: {resp.status_code} {resp.text}")
+            logger.error("Zoho update_record failed for %s/%s: %s %s", module, record_id, resp.status_code, resp.text[:500])
             return False
         except Exception as e:
-            print(f"Error in update_record: {e}")
+            logger.error("Error in update_record %s/%s: %s", module, record_id, e)
             return False
 
     @staticmethod
@@ -526,3 +536,240 @@ class ZohoService:
     def update_deal(deal_id, deal_data):
         """Update a Deal record"""
         return ZohoService.update_record("Deals", deal_id, deal_data)
+
+    # ==================== CONTACT METHODS (Patient Portal) ====================
+
+    @staticmethod
+    def search_contact_by_email(email):
+        """Search Zoho Contacts by email."""
+        try:
+            url = f"{API_DOMAIN}/crm/v8/Contacts/search"
+            params = {"criteria": f"(Email:equals:{email})"}
+            resp = requests.get(url, headers=ZohoService.get_headers(), params=params, timeout=10)
+            if resp.status_code == 200:
+                return resp.json().get("data", [])
+            return []
+        except Exception as e:
+            logger.error("Error searching contact by email: %s", e)
+            return []
+
+    @staticmethod
+    def search_contact_by_phone(phone):
+        """Search Zoho Contacts by mobile."""
+        try:
+            url = f"{API_DOMAIN}/crm/v8/Contacts/search"
+            params = {"criteria": f"(Mobile:equals:{phone})"}
+            resp = requests.get(url, headers=ZohoService.get_headers(), params=params, timeout=10)
+            if resp.status_code == 200:
+                return resp.json().get("data", [])
+            return []
+        except Exception as e:
+            logger.error("Error searching contact by phone: %s", e)
+            return []
+
+    @staticmethod
+    def create_contact(contact_data):
+        """Create a new Zoho Contact. Returns the new contact's ID or None."""
+        try:
+            url = f"{API_DOMAIN}/crm/v8/Contacts"
+            payload = {"data": [contact_data]}
+            resp = requests.post(url, headers=ZohoService.get_headers(), json=payload, timeout=15)
+            if resp.status_code in (200, 201):
+                result = resp.json().get('data', [{}])[0]
+                if result.get('status') == 'success':
+                    return result.get('details', {}).get('id')
+            logger.error("Zoho create_contact failed: %s %s", resp.status_code, resp.text[:500])
+            return None
+        except Exception as e:
+            logger.error("Error creating contact: %s", e)
+            return None
+
+    @staticmethod
+    def update_contact(contact_id, contact_data):
+        """Update an existing Zoho Contact."""
+        return ZohoService.update_record("Contacts", contact_id, contact_data)
+
+    # ==================== DEAL METHODS (Patient Journey) ====================
+
+    @staticmethod
+    def get_deals_by_contact(contact_id):
+        """Get all Deals associated with a Contact (patient journeys)."""
+        try:
+            url = f"{API_DOMAIN}/crm/v8/Contacts/{contact_id}/Deals"
+            fields = (
+                'Deal_Name,Contact_Name,Stage,Next_Step,Lead_Source,Description,Pipeline,'
+                'id,Discharge_Doc_PDF,Record_Status__s,Discharge_Dt,Mobile,Email,'
+                'Mapped_Registrations,Registration_Amount,Payment_Date,Appointment_Date_Time,'
+                'Payment_Details,Treatment,Treatment_Category,Approx_Treatment_Duration_in_Days,'
+                'Approx_Treatment_Cost,Marketing_Rep_Name,Ezeehealth_Staff,'
+                'Create_Patient_Registration,Discharge_Status,Registered_SSH,'
+                'Attendant_Mobile,Attendant_Name_3,Provisional_Diagnosis_3,'
+                'Discharge_Bill_Amount_Details,Patient_Service_Exec_Mobile,'
+                'Marketing_Exec_Mobile,Primary_Doctor'
+            )
+            params = {"fields": fields, "sort_by": "Created_Time", "sort_order": "desc"}
+            resp = requests.get(url, headers=ZohoService.get_headers(), params=params, timeout=15)
+            if resp.status_code == 200:
+                return resp.json().get("data", [])
+            return []
+        except Exception as e:
+            logger.error("Error fetching deals by contact %s: %s", contact_id, e)
+            return []
+
+    @staticmethod
+    def get_deal(deal_id):
+        """Fetch a single Deal by ID with full field set."""
+        try:
+            url = f"{API_DOMAIN}/crm/v8/Deals/{deal_id}"
+            fields = (
+                'Deal_Name,Contact_Name,Stage,Stage_History,Next_Step,Lead_Source,Description,'
+                'Pipeline,id,Discharge_Doc_PDF,Record_Status__s,Discharge_Dt,Mobile,Email,'
+                'Mapped_Registrations,Registration_Amount,Payment_Date,Appointment_Date_Time,'
+                'Payment_Details,Treatment,Treatment_Category,Approx_Treatment_Duration_in_Days,'
+                'Approx_Treatment_Cost,Marketing_Rep_Name,Ezeehealth_Staff,'
+                'Create_Patient_Registration,Discharge_Status,Registered_SSH,'
+                'Attendant_Mobile,Attendant_Name_3,Provisional_Diagnosis_3,'
+                'Discharge_Bill_Amount_Details,Patient_Service_Exec_Mobile,'
+                'Marketing_Exec_Mobile,Primary_Doctor'
+            )
+            params = {"fields": fields}
+            resp = requests.get(url, headers=ZohoService.get_headers(), params=params, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                return data[0] if data else None
+            return None
+        except Exception as e:
+            logger.error("Error fetching deal %s: %s", deal_id, e)
+            return None
+
+    @staticmethod
+    def get_deal_stage_history(deal_id):
+        """Get stage history for a Deal."""
+        try:
+            url = f"{API_DOMAIN}/crm/v8/Deals/{deal_id}/Stage_History"
+            params = {
+                "fields": "Stage,Stage_Name,Modified_Time,Modified_By,From_Stage,To_Stage,Duration_in_Stage",
+                "per_page": 200,
+            }
+            resp = requests.get(url, headers=ZohoService.get_headers(), params=params, timeout=10)
+            if resp.status_code == 200:
+                return resp.json().get("data", [])
+            return []
+        except Exception as e:
+            logger.error("Error fetching deal stage history for %s: %s", deal_id, e)
+            return []
+
+    # ==================== EVENT METHODS (Meetings) ====================
+
+    @staticmethod
+    def get_events_for_contact(contact_zoho_id):
+        """Fetch Zoho Events and filter for a specific contact."""
+        try:
+            url = f"{API_DOMAIN}/crm/v8/Events"
+            params = {
+                "fields": (
+                    "Event_Title,Start_DateTime,End_DateTime,Venue,Participants,"
+                    "What_Id,Who_Id,Owner,Description,Remind_At,All_day,"
+                    "Created_Time,Modified_Time"
+                ),
+                "per_page": 200,
+            }
+            resp = requests.get(url, headers=ZohoService.get_headers(), params=params, timeout=15)
+            if resp.status_code != 200:
+                return []
+            meetings = resp.json().get("data", [])
+            user_meetings = []
+            for m in meetings:
+                who_id = m.get("Who_Id")
+                if who_id and str(who_id.get("id")) == str(contact_zoho_id):
+                    user_meetings.append(m)
+                    continue
+                participants = m.get("Participants") or []
+                for p in participants:
+                    if str(p.get("participant", "")) == str(contact_zoho_id):
+                        user_meetings.append(m)
+                        break
+            return user_meetings
+        except Exception as e:
+            logger.error("Error fetching events for contact %s: %s", contact_zoho_id, e)
+            return []
+
+    # ==================== SSH / CORPORATE / DOCTORS (Patient Portal) ====================
+
+    @staticmethod
+    def get_ssh_details(ssh_name):
+        """Get Super Specialty Hospital details by name."""
+        try:
+            url = f"{API_DOMAIN}/crm/v8/SSH/search"
+            params = {
+                "criteria": f"(Name:equals:'{ssh_name}')",
+                "fields": (
+                    "Name,Email,Secondary_Email,Phone_1,Phone_2,Treatments,"
+                    "SPOC_1,SPOPC_1_Email,SPOC_2,SPOC_1_Mobile,SPOC_2_Email,"
+                    "SPOC_2_Mobile,Decision_Maker_Name,SSH_Address,Type_of_Hospital"
+                ),
+            }
+            resp = requests.get(url, headers=ZohoService.get_headers(), params=params, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                return data[0] if data else None
+            return None
+        except Exception as e:
+            logger.error("Error fetching SSH details for %s: %s", ssh_name, e)
+            return None
+
+    @staticmethod
+    def get_corporate_by_email_domain(domain):
+        """Find corporate record by email domain."""
+        try:
+            url = f"{API_DOMAIN}/crm/v8/Corporate/search"
+            params = {
+                "criteria": f"(Email_Domain:equals:{domain})",
+                "fields": "Name,Email_Domain,Marketing_Rep,Industry_Type,Primary_Doctor_Name,id",
+            }
+            resp = requests.get(url, headers=ZohoService.get_headers(), params=params, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                return data[0] if data else None
+            return None
+        except Exception as e:
+            logger.error("Error fetching corporate for domain %s: %s", domain, e)
+            return None
+
+    @staticmethod
+    def get_doctors_by_corporate(corporate_id):
+        """Get all doctors associated with a corporate."""
+        try:
+            url = f"{API_DOMAIN}/crm/v8/Doctors/search"
+            params = {
+                "criteria": f"(Corporate:equals:{corporate_id})",
+                "fields": "Name,Email,Phone,Mobile,Specialization,Experience_in_Years,Associated_Hospital,Consultation_Fees",
+                "per_page": 200,
+            }
+            resp = requests.get(url, headers=ZohoService.get_headers(), params=params, timeout=10)
+            if resp.status_code == 200:
+                return resp.json().get("data", [])
+            return []
+        except Exception as e:
+            logger.error("Error fetching corporate doctors for %s: %s", corporate_id, e)
+            return []
+
+    @staticmethod
+    def get_ezeehealth_doctors():
+        """Get all doctors under the Ezeehealth corporate entity."""
+        try:
+            corporate = ZohoService.get_corporate_by_email_domain("ezeehealth.ai")
+            if not corporate:
+                # Fallback: search by name
+                url = f"{API_DOMAIN}/crm/v8/Corporate/search"
+                params = {"criteria": "(Name:equals:Ezeehealth)", "fields": "Name,id"}
+                resp = requests.get(url, headers=ZohoService.get_headers(), params=params, timeout=10)
+                if resp.status_code == 200:
+                    data = resp.json().get("data", [])
+                    corporate = data[0] if data else None
+            if not corporate:
+                return []
+            return ZohoService.get_doctors_by_corporate(corporate.get("id"))
+        except Exception as e:
+            logger.error("Error fetching Ezeehealth doctors: %s", e)
+            return []
