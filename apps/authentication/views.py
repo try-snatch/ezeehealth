@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import views, status, permissions
 from rest_framework.response import Response
 from django.conf import settings
@@ -25,6 +27,8 @@ from django.contrib.auth import authenticate
 from django.utils import timezone
 from datetime import timedelta
 
+logger = logging.getLogger(__name__)
+
 
 class RegisterView(views.APIView):
     permission_classes = [permissions.AllowAny]
@@ -32,7 +36,7 @@ class RegisterView(views.APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
-            print(f"Recieved register request with data {request.data}")
+            logger.info("Register request for mobile %s, clinic '%s'", data.get('mobile'), data.get('clinic_name'))
             data = serializer.validated_data
 
             # Create Clinic
@@ -46,7 +50,7 @@ class RegisterView(views.APIView):
                 }
             )
 
-            print("After clinic")
+            logger.info("Clinic '%s' %s", clinic.name, "created" if created else "already existed")
 
             # Create Doctor User
             # Split Name
@@ -85,11 +89,10 @@ class RegisterView(views.APIView):
             try:
                 ZohoService.create_or_update_doctor(zoho_data)
             except Exception as e:
-                print(f"Failed to sync with Zoho during registration: {e}")
+                logger.error("Failed to sync with Zoho during registration: %s", e)
 
             otp = generate_otp()
-            if settings.DEBUG:
-                print(f'[DEV OTP] Registration - mobile: {user.mobile}, otp: {otp}')
+            logger.debug("Registration OTP for %s: %s", user.mobile, otp)
             cache.set(f"otp_2fa_{user.id}", otp, timeout=300)
             send_auth_otp(user.mobile, otp)
 
@@ -107,8 +110,9 @@ class RegisterView(views.APIView):
                         user_name=f"{user.first_name} {user.last_name}".strip()
                     )
                 except Exception as e:
-                    print(f"Failed to send verification email: {e}")
+                    logger.error("Failed to send verification email to %s: %s", user.email, e)
 
+            logger.info("Registration successful for %s (user_id=%s)", user.mobile, user.id)
             return Response({"message": "Registration successful. OTP sent.", "identifier": user.mobile}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -131,12 +135,15 @@ class LoginView(views.APIView):
         if not identifier or not password:
             return Response({"error": "identifier and password required"}, status=status.HTTP_400_BAD_REQUEST)
 
+        logger.info("Login attempt for identifier '%s'", identifier)
         user = authenticate(request, username=identifier, password=password)
         if not user:
+            logger.warning("Login failed — invalid credentials for '%s'", identifier)
             return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
         # Check if account is still pending (staff invitation not completed)
         if hasattr(user, 'account_status') and user.account_status == 'pending':
+            logger.warning("Login blocked — account pending for '%s' (user_id=%s)", identifier, user.id)
             return Response({"error": "Account not activated. Please check your email for the invitation link."}, status=status.HTTP_403_FORBIDDEN)
 
         # If user has 2FA enabled => send OTP via MSG91 and return 2fa_required
@@ -149,8 +156,7 @@ class LoginView(views.APIView):
             otp = generate_otp()
             cache_key = f"otp_2fa_{user.id}"
             cache.set(cache_key, otp, timeout=300)  # 5 minutes expiry
-            if settings.DEBUG:
-                print(f'[DEV OTP] Login 2FA - mobile: {user.mobile}, otp: {otp}')
+            logger.debug("Login 2FA OTP for %s: %s", user.mobile, otp)
 
             send_success = send_auth_otp(user.mobile, otp)
 
@@ -158,12 +164,15 @@ class LoginView(views.APIView):
             user.last_otp_sent_at = timezone.now()
             user.save(update_fields=['last_otp_sent_at'])
 
-            if not send_success:
-                print(f"Warning: OTP sending failed for {user.mobile}")
+            if send_success:
+                logger.info("Login 2FA OTP sent to %s (user_id=%s)", user.mobile, user.id)
+            else:
+                logger.error("Login 2FA OTP sending FAILED for %s (user_id=%s)", user.mobile, user.id)
 
             return Response({"2fa_required": True, "method": "sms", "identifier": user.mobile}, status=status.HTTP_200_OK)
 
         # No 2FA -> issue tokens
+        logger.info("Login success (no 2FA) for %s (user_id=%s, role=%s)", user.mobile, user.id, user.role)
         refresh = RefreshToken.for_user(user)
         return Response({
             'refresh': str(refresh),
@@ -191,6 +200,7 @@ class VerifyOTPView(views.APIView):
         # find user by mobile or username (same lookup as other places)
         user = User.objects.filter(mobile=identifier).first() or User.objects.filter(username=identifier).first()
         if not user:
+            logger.warning("OTP verify — user not found for identifier '%s'", identifier)
             return Response({"error": "User not found. Please Register"}, status=status.HTTP_404_NOT_FOUND)
 
         # Development bypass (existing)
@@ -199,8 +209,7 @@ class VerifyOTPView(views.APIView):
         else:
             cached_otp = cache.get(f"otp_2fa_{user.id}")
 
-        if settings.DEBUG:
-            print(f'[DEV OTP] Verify - mobile: {identifier}, submitted: {otp}, cached: {cached_otp}')
+        logger.debug("OTP verify for %s — submitted: %s, cached: %s", identifier, otp, cached_otp)
 
         if cached_otp and cached_otp == otp:
             # OTP correct -> issue tokens
@@ -225,6 +234,7 @@ class VerifyOTPView(views.APIView):
             cache.delete(f"otp_{user.mobile}")
 
             refresh = RefreshToken.for_user(user)
+            logger.info("OTP verified — login success for %s (user_id=%s, role=%s)", user.mobile, user.id, user.role)
             return Response({
                 'refresh': str(refresh),
                 'access': str(refresh.access_token),
@@ -232,6 +242,7 @@ class VerifyOTPView(views.APIView):
             }, status=status.HTTP_200_OK)
 
         # If we get here -> invalid/expired OTP
+        logger.warning("OTP verify failed for %s (user_id=%s) — invalid or expired", identifier, user.id)
         return Response({"error": "Invalid or expired OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -282,7 +293,7 @@ class MeView(views.APIView):
                     try:
                         delete_user_profile_picture(user.profile_picture)
                     except Exception as e:
-                        print(f"Warning: Failed to delete old profile picture: {e}")
+                        logger.warning("Failed to delete old profile picture for user %s: %s", user.id, e)
 
                 # Upload new profile picture
                 from apps.patients.s3_utils import upload_user_profile_picture
@@ -296,9 +307,7 @@ class MeView(views.APIView):
                 user.profile_picture = s3_key
                 user.save()
             except Exception as e:
-                print(f"Profile picture upload error: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error("Profile picture upload error for user %s: %s", user.id, e, exc_info=True)
                 return Response({
                     "error": f"Profile picture upload failed: {str(e)}"
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -464,7 +473,7 @@ class ResendEmailVerificationView(views.APIView):
                 user_name=f"{user.first_name} {user.last_name}".strip()
             )
         except Exception as e:
-            print(f"Failed to send verification email: {e}")
+            logger.error("Failed to send verification email to %s: %s", email, e)
             return Response({"error": "Failed to send verification email. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({"message": "Verification code sent."}, status=status.HTTP_200_OK)
@@ -507,7 +516,7 @@ class ForgotPasswordView(views.APIView):
                     user_name=f"{user.first_name} {user.last_name}".strip()
                 )
             except Exception as e:
-                print(f"Failed to send password reset email: {e}")
+                logger.error("Failed to send password reset email to %s: %s", email, e)
         except User.DoesNotExist:
             pass  # Don't reveal if email exists
 
@@ -635,8 +644,7 @@ class StaffSetupAccountView(views.APIView):
         # Generate and send OTP for mobile verification
         otp = generate_otp()
         cache.set(f"otp_2fa_{user.id}", otp, timeout=300)
-        if settings.DEBUG:
-            print(f'[DEV OTP] Staff Setup - mobile: {user.mobile}, otp: {otp}')
+        logger.debug("Staff setup OTP for %s: %s", user.mobile, otp)
         send_auth_otp(user.mobile, otp)
         user.last_otp_sent_at = timezone.now()
         user.save(update_fields=['last_otp_sent_at'])
@@ -732,8 +740,7 @@ class PatientSetupAccountView(views.APIView):
         # Send OTP for mobile verification (same pattern as staff)
         otp = generate_otp()
         cache.set(f"otp_2fa_{user.id}", otp, timeout=300)
-        if settings.DEBUG:
-            print(f'[DEV OTP] Patient Setup - mobile: {user.mobile}, otp: {otp}')
+        logger.debug("Patient setup OTP for %s: %s", user.mobile, otp)
         send_auth_otp(user.mobile, otp)
         user.last_otp_sent_at = timezone.now()
         user.save(update_fields=['last_otp_sent_at'])
