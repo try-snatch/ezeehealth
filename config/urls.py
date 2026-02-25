@@ -18,6 +18,7 @@ from apps.patients.views import (
     PatientDocumentListUploadView, PatientDocumentDetailView,
     PatientDocumentInsightView, ZohoWebhookView, SendPatientInviteView,
     GenerateDocumentUploadLinkView, VerifyDocumentUploadTokenView, DocumentUploadViaTokenView,
+    HospitalListView,
 )
 from apps.staff.views import StaffListView, StaffDetailView
 
@@ -66,6 +67,9 @@ urlpatterns = [
     path('api/patients/<int:pk>/document-upload-link/', GenerateDocumentUploadLinkView.as_view(), name='generate-document-upload-link'),
     path('api/document-upload/verify/<str:token>/', VerifyDocumentUploadTokenView.as_view(), name='verify-document-upload-token'),
     path('api/document-upload/<str:token>/', DocumentUploadViaTokenView.as_view(), name='document-upload-via-token'),
+
+    # Hospitals (SSH)
+    path('api/hospitals/', HospitalListView.as_view(), name='hospital-list'),
 
     # Dashboard (support both old and new URL)
     path('api/dashboard/', DashboardStatsView.as_view(), name='dashboard'),

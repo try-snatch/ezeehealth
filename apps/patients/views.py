@@ -149,8 +149,15 @@ class PatientDetailView(generics.RetrieveAPIView):
 
 
 class OPDPatientRegistrationView(views.APIView):
-    """Register a new OPD patient (local DB only, no Zoho yet)."""
+    """Register a new OPD patient (local DB only, no Zoho yet).
+    Accepts JSON or multipart/form-data.  When multipart, any files
+    attached under 'documents' (or 'documents[]') are uploaded to S3
+    after the patient record is created.
+    """
     permission_classes = [IsAuthenticated]
+
+    ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'png', 'bmp', 'tiff', 'webp'}
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
     def post(self, request):
         user = request.user
@@ -165,13 +172,61 @@ class OPDPatientRegistrationView(views.APIView):
             data['full_name'] = data['name']
 
         serializer = PatientSerializer(data=data, context={'request': request})
-        if serializer.is_valid():
-            patient = serializer.save(clinic=user.clinic, status='opd')
-            return Response(
-                PatientSerializer(patient, context={'request': request}).data,
-                status=status.HTTP_201_CREATED
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        patient = serializer.save(clinic=user.clinic, status='opd')
+
+        # ---- Handle optional document uploads ----
+        files = request.FILES.getlist('documents') or request.FILES.getlist('documents[]')
+        uploaded_docs = []
+        errors = []
+
+        for file_obj in files:
+            original_filename = file_obj.name
+            ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
+
+            if ext not in self.ALLOWED_EXTENSIONS:
+                errors.append(f"{original_filename}: file type not allowed")
+                continue
+            if file_obj.size > self.MAX_FILE_SIZE:
+                errors.append(f"{original_filename}: exceeds 10 MB limit")
+                continue
+
+            import uuid as uuid_module
+            doc_id = uuid_module.uuid4()
+            s3_filename = f"{doc_id}.{ext}" if ext else str(doc_id)
+
+            s3_key = upload_patient_document(patient.id, file_obj, s3_filename)
+            if not s3_key:
+                errors.append(f"{original_filename}: upload to storage failed")
+                continue
+
+            title = original_filename.rsplit('.', 1)[0]
+            doc = PatientDocument.objects.create(
+                id=doc_id,
+                patient=patient,
+                clinic=user.clinic,
+                uploaded_by=user,
+                s3_key=s3_key,
+                title=title,
+                category='Others',
+                file_extension=ext,
+                file_size=file_obj.size,
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            uploaded_docs.append({'id': str(doc.id), 'title': doc.title})
+
+            # Kick off async AI processing
+            from .ai_service import process_document
+            threading.Thread(target=process_document, args=(doc.id,), daemon=True).start()
+
+        response_data = PatientSerializer(patient, context={'request': request}).data
+        if uploaded_docs:
+            response_data['documents'] = uploaded_docs
+        if errors:
+            response_data['document_errors'] = errors
+
+        return Response(response_data, status=status.HTTP_201_CREATED)
 
 
 class CreateReferralView(views.APIView):
@@ -768,6 +823,23 @@ class PatientDocumentInsightView(views.APIView):
             {"status": "processing", "message": "Document is being analyzed. Please check back shortly."},
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+# ============================================================================
+# HOSPITALS (SSH) LIST
+# ============================================================================
+
+class HospitalListView(views.APIView):
+    """GET /api/hospitals/ — list Super Specialty Hospitals from Zoho."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            hospitals = ZohoService.list_hospitals()
+            return Response(hospitals, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error("HospitalListView error: %s", e)
+            return Response({"error": "Failed to fetch hospitals"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ============================================================================
