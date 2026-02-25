@@ -173,23 +173,30 @@ class OPDPatientRegistrationView(views.APIView):
 
         serializer = PatientSerializer(data=data, context={'request': request})
         if not serializer.is_valid():
+            logger.warning("OPD registration validation failed: %s (user=%s)", serializer.errors, user.id)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         patient = serializer.save(clinic=user.clinic, status='opd')
+        logger.info("OPD patient created: id=%s name=%s clinic=%s user=%s", patient.id, patient.full_name, user.clinic_id, user.id)
 
         # ---- Handle optional document uploads ----
         files = request.FILES.getlist('documents') or request.FILES.getlist('documents[]')
         uploaded_docs = []
         errors = []
 
+        if files:
+            logger.info("OPD registration includes %d document(s) for patient %s", len(files), patient.id)
+
         for file_obj in files:
             original_filename = file_obj.name
             ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
 
             if ext not in self.ALLOWED_EXTENSIONS:
+                logger.warning("OPD doc upload rejected — bad extension: %s (patient=%s)", original_filename, patient.id)
                 errors.append(f"{original_filename}: file type not allowed")
                 continue
             if file_obj.size > self.MAX_FILE_SIZE:
+                logger.warning("OPD doc upload rejected — too large: %s (%d bytes, patient=%s)", original_filename, file_obj.size, patient.id)
                 errors.append(f"{original_filename}: exceeds 10 MB limit")
                 continue
 
@@ -199,6 +206,7 @@ class OPDPatientRegistrationView(views.APIView):
 
             s3_key = upload_patient_document(patient.id, file_obj, s3_filename)
             if not s3_key:
+                logger.error("OPD doc S3 upload failed: %s (patient=%s)", original_filename, patient.id)
                 errors.append(f"{original_filename}: upload to storage failed")
                 continue
 
@@ -215,10 +223,14 @@ class OPDPatientRegistrationView(views.APIView):
                 file_size=file_obj.size,
             )
             uploaded_docs.append({'id': str(doc.id), 'title': doc.title})
+            logger.info("OPD doc uploaded: doc_id=%s file=%s size=%d s3_key=%s (patient=%s)", doc.id, original_filename, file_obj.size, s3_key, patient.id)
 
             # Kick off async AI processing
             from .ai_service import process_document
             threading.Thread(target=process_document, args=(doc.id,), daemon=True).start()
+
+        if errors:
+            logger.warning("OPD doc upload completed with %d error(s) for patient %s: %s", len(errors), patient.id, errors)
 
         response_data = PatientSerializer(patient, context={'request': request}).data
         if uploaded_docs:
@@ -694,12 +706,14 @@ class PatientDocumentListUploadView(views.APIView):
         original_filename = file_obj.name
         ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
         if ext not in allowed_extensions:
+            logger.warning("Doc upload rejected — bad extension: %s (patient=%s, user=%s)", original_filename, pk, user.id)
             return Response(
                 {"error": f"File type not allowed. Allowed: {', '.join(sorted(allowed_extensions))}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         if file_obj.size > 10 * 1024 * 1024:
+            logger.warning("Doc upload rejected — too large: %s (%d bytes, patient=%s, user=%s)", original_filename, file_obj.size, pk, user.id)
             return Response({"error": "File too large. Maximum size is 10MB."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Pre-generate the document UUID so the S3 key is unique and tied to the DB record
@@ -707,8 +721,10 @@ class PatientDocumentListUploadView(views.APIView):
         doc_id = uuid_module.uuid4()
         s3_filename = f"{doc_id}.{ext}" if ext else str(doc_id)
 
+        logger.info("Uploading doc to S3: file=%s size=%d patient=%s user=%s", original_filename, file_obj.size, pk, user.id)
         s3_key = upload_patient_document(patient.id, file_obj, s3_filename)
         if not s3_key:
+            logger.error("S3 upload failed: file=%s patient=%s user=%s", original_filename, pk, user.id)
             return Response({"error": "Failed to upload file to storage"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         title = (request.data.get('title') or '').strip() or original_filename.rsplit('.', 1)[0]
@@ -725,6 +741,7 @@ class PatientDocumentListUploadView(views.APIView):
             file_extension=ext,
             file_size=file_obj.size,
         )
+        logger.info("Doc created: doc_id=%s file=%s s3_key=%s patient=%s user=%s", doc.id, original_filename, s3_key, pk, user.id)
 
         # Kick off async AI processing
         from .ai_service import process_document
