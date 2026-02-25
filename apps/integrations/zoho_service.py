@@ -722,7 +722,7 @@ class ZohoService:
     def list_hospitals():
         """Fetch all hospitals from the Zoho Hospitals module."""
         try:
-            url = f"{API_DOMAIN}/crm/v8/Hospitals"
+            url = f"{API_DOMAIN}/crm/v8/SSH"
             params = {
                 "fields": "Name,id,Type_of_Hospital,Phone_1",
                 "per_page": 200,
@@ -730,6 +730,7 @@ class ZohoService:
                 "sort_order": "asc",
             }
             resp = requests.get(url, headers=ZohoService.get_headers(), params=params, timeout=15)
+            logger.info("Returned SSH from ZOHO: ", resp)
             if resp.status_code == 200:
                 data = resp.json().get("data", [])
                 return [
