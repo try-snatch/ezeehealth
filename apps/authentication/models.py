@@ -55,6 +55,7 @@ class User(AbstractUser):
 
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, null=True, blank=True, related_name='users')
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='doctor')
+    custom_role = models.CharField(max_length=50, blank=True, default='', help_text="Custom role title when role is 'other'")
     registration_number = models.CharField(max_length=100, blank=True, null=True, help_text="For doctors only")
 
     # Access control

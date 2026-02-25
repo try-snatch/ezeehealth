@@ -118,7 +118,7 @@ class StaffSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'mobile', 'first_name', 'last_name',
-            'email', 'registration_number', 'role',
+            'email', 'registration_number', 'role', 'custom_role',
             'can_view_financial', 'account_status', 'invitation_sent_at',
             'send_credentials_via_sms', 'profile_picture_url',
         ]
