@@ -270,6 +270,7 @@ class CreateReferralView(views.APIView):
             'age': patient.age,
             'gender': patient.gender,
             'doctor_id': zoho_doctor_id,
+            'suggested_sshs': suggested_sshs
         }
 
         zoho_lead_id = ZohoService.create_lead(lead_data)

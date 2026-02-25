@@ -312,7 +312,7 @@ class ZohoService:
                         "age": lead.get("Age") or "",
                         "gender": lead.get("Gender") or "",
                         "date": lead.get("Modified_Time") or lead.get("Created_Time") or "",
-                        "specialty": lead.get("Suggested_SSHs") or "",
+                        # "specialty": lead.get("Suggested_SSHs") or "",
                         "hospital": lead.get("Suggested_SSHs") or "",
                         "source": "lead",
                     })
@@ -341,7 +341,8 @@ class ZohoService:
                         "Doctor_Name": lead_data.get('doctor_id'),
                         "Description": lead_data.get('diagnosis'),
                         "Provisional_Diagnosis": lead_data.get('diagnosis'),
-                        "Suggested_SSHs": lead_data.get('suggested_specialty'),
+                        "Suggested_SSHs": lead_data.get('suggested_sshs'),
+                        "Suggested_Speciality": lead_data.get('suggested_speciality'),
                         "Email": lead_data.get('email'),
                         "Age": lead_data.get('age'),
                         "Gender": lead_data.get('gender'),
@@ -724,16 +725,23 @@ class ZohoService:
         try:
             url = f"{API_DOMAIN}/crm/v8/SSH"
             params = {
-                "fields": "Name,id,Type_of_Hospital,Phone_1",
+                "fields": "Name,id,Type_of_Hospital,Phone_2",
                 "per_page": 200,
-                "sort_by": "Name",
-                "sort_order": "asc",
             }
-            resp = requests.get(url, headers=ZohoService.get_headers(), params=params, timeout=15)
-            logger.info("Returned SSH from ZOHO: ", resp)
+
+            resp = requests.get(
+                url,
+                headers=ZohoService.get_headers(),
+                params=params,
+                timeout=15
+            )
+
+            logger.info(f"Response: {resp.json()}")
+
             if resp.status_code == 200:
                 data = resp.json().get("data", [])
-                return [
+
+                hospitals = [
                     {
                         "id": h.get("id"),
                         "name": h.get("Name"),
@@ -742,8 +750,15 @@ class ZohoService:
                     for h in data
                     if h.get("Name")
                 ]
+
+                # 🔥 Sort by name (case-insensitive)
+                hospitals.sort(key=lambda x: x["name"].lower())
+
+                return hospitals
+
             logger.error("list_hospitals: Zoho returned %s — %s", resp.status_code, resp.text[:500])
             return []
+
         except Exception as e:
             logger.error("list_hospitals: exception — %s", e)
             return []
