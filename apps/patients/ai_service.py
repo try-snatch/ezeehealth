@@ -137,11 +137,15 @@ def _ocr_image_bytes(img_bytes):
             client,
             model='gemini-2.5-flash',
             contents=[
-                types.Part.from_text(text=
-                    'Extract all text from this medical document. '
-                    'Return only the text content, preserving structure. '
-                    'Do not add any commentary.'
-                ),
+                types.Part.from_text(text=(
+                    'Analyze this medical document image. '
+                    'If it contains text (lab reports, prescriptions, discharge summaries, etc.), '
+                    'extract all text content, preserving structure. '
+                    'If it is a medical scan or imaging (X-ray, CT, MRI, ultrasound, ECG, etc.), '
+                    'describe what you observe: the type of imaging, anatomical region, '
+                    'any visible findings, abnormalities, or annotations. '
+                    'Return only the extracted text or imaging description, no commentary about image quality.'
+                )),
                 types.Part.from_bytes(data=enhanced_bytes, mime_type='image/png'),
             ],
         )
@@ -246,6 +250,10 @@ def generate_insights(doc_id, patient_id):
   "tags": ["severity/priority tags — choose only from: high, medium, low"]
 }}
 
+The document may be a text-based report (lab results, prescriptions, discharge summaries) or a
+description of medical imaging (X-ray, CT, MRI, ultrasound, ECG). Analyze whatever content is
+provided and extract meaningful medical insights.
+
 Document text:
 {full_text[:15000]}
 
@@ -301,8 +309,20 @@ def process_document(document_id):
         _os.unlink(tmp_path)
 
         text = extract_text(file_bytes, doc.file_extension)
-        if not text:
+        if not text or len(text.strip()) < 20:
             logger.warning(f"No text extracted from document {document_id}")
+            PatientDocumentInsight.objects.update_or_create(
+                document=doc,
+                defaults={
+                    'title': 'Could Not Process Document',
+                    'summary': 'We could not extract readable content from this document. Please upload a clearer image or a text-based PDF.',
+                    'key_findings': [],
+                    'risk_flags': [],
+                    'tags': [],
+                }
+            )
+            doc.ai_processed = True
+            doc.save(update_fields=['ai_processed'])
             return
 
         chunk_and_embed_document(
