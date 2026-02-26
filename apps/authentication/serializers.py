@@ -144,7 +144,7 @@ class StaffSerializer(serializers.ModelSerializer):
 
     def validate_role(self, value):
         # allow the staff roles your frontend uses
-        if value not in ['receptionist', 'nurse', 'assistant']:
+        if value not in ['receptionist', 'nurse', 'assistant', 'other']:
             raise serializers.ValidationError("Invalid role for staff.")
         return value
 

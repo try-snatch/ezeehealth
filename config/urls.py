@@ -6,7 +6,7 @@ from django.views.generic import TemplateView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.authentication.views import (
-    RegisterView, LoginView, VerifyOTPView, MeView,
+    RegisterView, ResendRegistrationOTPView, LoginView, VerifyOTPView, MeView,
     VerifyEmailView, ResendEmailVerificationView, ForgotPasswordView,
     ResetPasswordView, VerifyInvitationView, StaffSetupAccountView,
     PatientVerifyInviteView, PatientSetupAccountView,
@@ -42,6 +42,7 @@ urlpatterns = [
 
     # Auth
     path('api/auth/register/', RegisterView.as_view(), name='register'),
+    path('api/auth/resend-registration-otp/', ResendRegistrationOTPView.as_view(), name='resend-registration-otp'),
     path('api/auth/request-otp/', LoginView.as_view(), name='login'),
     path('api/auth/verify-otp/', VerifyOTPView.as_view(), name='verify-otp'),
     path('api/auth/me/', MeView.as_view(), name='me'),

@@ -39,6 +39,12 @@ class RegisterView(views.APIView):
             data = serializer.validated_data
             logger.info("Register request for mobile %s, clinic '%s'", data.get('mobile'), data.get('clinic_name'))
 
+            # Check for existing mobile/email before creating
+            if User.objects.filter(mobile=data['mobile']).exists():
+                return Response({"error": "A user with this mobile number is already registered."}, status=status.HTTP_400_BAD_REQUEST)
+            if data.get('email') and User.objects.filter(email__iexact=data['email']).exists():
+                return Response({"error": "A user with this email is already registered."}, status=status.HTTP_400_BAD_REQUEST)
+
             # Create Clinic
             clinic, created = Clinic.objects.get_or_create(
                 name=data['clinic_name'],
@@ -116,6 +122,36 @@ class RegisterView(views.APIView):
             return Response({"message": "Registration successful. OTP sent.", "identifier": user.mobile}, status=status.HTTP_201_CREATED)
         logger.warning("Registration validation failed: %s", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class ResendRegistrationOTPView(views.APIView):
+    """Resend OTP for a user who just registered but didn't receive/verify OTP."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        identifier = request.data.get('identifier', '').strip()
+        if not identifier:
+            return Response({"error": "identifier is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(mobile=identifier).first()
+        if not user:
+            return Response({"error": "User not found. Please register first."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Rate-limit: prevent OTP flood
+        last_sent = user.last_otp_sent_at
+        if last_sent and (timezone.now() - last_sent).total_seconds() < 30:
+            return Response({"error": "OTP sent recently. Try after a short while."}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        otp = generate_otp()
+        cache.set(f"otp_2fa_{user.id}", otp, timeout=300)
+        logger.debug("Resend registration OTP for %s: %s", user.mobile, otp)
+        send_auth_otp(user.mobile, otp)
+
+        user.last_otp_sent_at = timezone.now()
+        user.save(update_fields=['last_otp_sent_at'])
+
+        logger.info("Registration OTP resent for %s (user_id=%s)", user.mobile, user.id)
+        return Response({"message": "OTP resent successfully.", "identifier": user.mobile}, status=status.HTTP_200_OK)
+
 
 class LoginView(views.APIView):
     permission_classes = [permissions.AllowAny]

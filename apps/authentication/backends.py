@@ -29,10 +29,6 @@ class EmailOrMobileBackend(ModelBackend):
             except User.DoesNotExist:
                 return None
 
-        # Check if account is pending
-        if hasattr(user, 'account_status') and user.account_status == 'pending':
-            return None
-
         # Verify password and user can authenticate
         if user.check_password(password) and self.user_can_authenticate(user):
             return user
