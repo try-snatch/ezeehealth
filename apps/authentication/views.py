@@ -36,8 +36,8 @@ class RegisterView(views.APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
-            logger.info("Register request for mobile %s, clinic '%s'", data.get('mobile'), data.get('clinic_name'))
             data = serializer.validated_data
+            logger.info("Register request for mobile %s, clinic '%s'", data.get('mobile'), data.get('clinic_name'))
 
             # Create Clinic
             clinic, created = Clinic.objects.get_or_create(
@@ -114,6 +114,7 @@ class RegisterView(views.APIView):
 
             logger.info("Registration successful for %s (user_id=%s)", user.mobile, user.id)
             return Response({"message": "Registration successful. OTP sent.", "identifier": user.mobile}, status=status.HTTP_201_CREATED)
+        logger.warning("Registration validation failed: %s", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class LoginView(views.APIView):
@@ -616,6 +617,7 @@ class StaffSetupAccountView(views.APIView):
     def post(self, request):
         serializer = StaffSetupSerializer(data=request.data)
         if not serializer.is_valid():
+            logger.warning("Staff setup validation failed: %s", serializer.errors)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         invitation_code = serializer.validated_data['invitation_code']
@@ -625,12 +627,16 @@ class StaffSetupAccountView(views.APIView):
         try:
             user = User.objects.get(invitation_code=invitation_code, account_status='pending')
         except User.DoesNotExist:
+            logger.warning("Staff setup failed — invalid invitation code: %s", invitation_code[:8])
             return Response({"error": "Invalid or expired invitation code."}, status=status.HTTP_404_NOT_FOUND)
+
+        logger.info("Staff setup started for %s (user_id=%s, role=%s)", user.mobile, user.id, user.role)
 
         # Check if invitation is expired (7 days)
         if user.invitation_sent_at:
             elapsed = (timezone.now() - user.invitation_sent_at).total_seconds()
             if elapsed > settings.INVITATION_EXPIRY:
+                logger.warning("Staff setup failed — invitation expired for user_id=%s (elapsed=%ds)", user.id, int(elapsed))
                 return Response({"error": "Invitation has expired. Please contact your administrator."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Set password and activate account
@@ -649,6 +655,7 @@ class StaffSetupAccountView(views.APIView):
         user.last_otp_sent_at = timezone.now()
         user.save(update_fields=['last_otp_sent_at'])
 
+        logger.info("Staff setup successful for %s (user_id=%s) — OTP sent", user.mobile, user.id)
         return Response({
             "message": "Account setup successful. OTP sent for verification.",
             "otp_required": True,
@@ -671,11 +678,14 @@ class PatientVerifyInviteView(views.APIView):
                 is_used=False,
             )
         except PatientInvite.DoesNotExist:
+            logger.warning("Patient invite verify — invalid code: %s", invitation_code[:8])
             return Response({"error": "Invalid or expired invitation."}, status=status.HTTP_404_NOT_FOUND)
 
         if timezone.now() > invite.expires_at:
+            logger.warning("Patient invite verify — expired for patient '%s'", invite.name)
             return Response({"error": "Invitation has expired. Please contact your clinic."}, status=status.HTTP_400_BAD_REQUEST)
 
+        logger.info("Patient invite verified for '%s' (phone=%s)", invite.name, invite.phone)
         return Response({
             "patient_name": invite.name,
             "clinic_name": invite.clinic_name,
@@ -703,16 +713,21 @@ class PatientSetupAccountView(views.APIView):
                 is_used=False,
             )
         except PatientInvite.DoesNotExist:
+            logger.warning("Patient setup failed — invalid invitation code: %s", invitation_code[:8])
             return Response({"error": "Invalid or expired invitation."}, status=status.HTTP_404_NOT_FOUND)
 
         if timezone.now() > invite.expires_at:
+            logger.warning("Patient setup failed — invitation expired for '%s'", invite.name)
             return Response({"error": "Invitation has expired. Please contact your clinic."}, status=status.HTTP_400_BAD_REQUEST)
 
         patient = invite.patient
 
         # Check if a User account already exists for this mobile
         if User.objects.filter(mobile=patient.phone).exists():
+            logger.warning("Patient setup failed — account already exists for mobile %s", patient.phone)
             return Response({"error": "An account already exists for this mobile number."}, status=status.HTTP_400_BAD_REQUEST)
+
+        logger.info("Patient setup started for '%s' (phone=%s)", patient.full_name, patient.phone)
 
         # Parse first/last name from full_name
         name_parts = (patient.full_name or '').strip().split(' ', 1)
@@ -745,6 +760,7 @@ class PatientSetupAccountView(views.APIView):
         user.last_otp_sent_at = timezone.now()
         user.save(update_fields=['last_otp_sent_at'])
 
+        logger.info("Patient setup successful for %s (user_id=%s) — OTP sent", user.mobile, user.id)
         return Response({
             "message": "Account created. OTP sent for verification.",
             "otp_required": True,
