@@ -105,9 +105,15 @@
         });
     }
 
+    var MAX_FILES = 5;
+
     // Add files (from input or drag-and-drop)
     function addFiles(fileList) {
         for (var i = 0; i < fileList.length; i++) {
+            if (selectedFiles.length >= MAX_FILES) {
+                alert('You can upload a maximum of ' + MAX_FILES + ' documents at a time.');
+                break;
+            }
             selectedFiles.push(fileList[i]);
         }
         renderFileList();

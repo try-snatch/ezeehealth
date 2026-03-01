@@ -158,6 +158,7 @@ class OPDPatientRegistrationView(views.APIView):
 
     ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'png', 'bmp', 'tiff', 'webp'}
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+    MAX_FILES = 5
 
     def post(self, request):
         user = request.user
@@ -181,6 +182,9 @@ class OPDPatientRegistrationView(views.APIView):
 
         # ---- Handle optional document uploads ----
         files = request.FILES.getlist('documents') or request.FILES.getlist('documents[]')
+        if len(files) > self.MAX_FILES:
+            files = files[:self.MAX_FILES]
+            logger.warning("OPD doc upload capped to %d files for patient %s", self.MAX_FILES, patient.id)
         uploaded_docs = []
         errors = []
 
@@ -956,6 +960,10 @@ class DocumentUploadViaTokenView(views.APIView):
         files = request.FILES.getlist('files')
         if not files:
             return Response({"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        max_files = 5
+        if len(files) > max_files:
+            return Response({"error": f"Maximum {max_files} documents allowed per upload"}, status=status.HTTP_400_BAD_REQUEST)
 
         category = request.data.get('category', 'Others')
         allowed_extensions = {'pdf', 'jpg', 'jpeg', 'png', 'bmp', 'tiff', 'webp'}
