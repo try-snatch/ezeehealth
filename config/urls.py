@@ -10,6 +10,7 @@ from apps.authentication.views import (
     VerifyEmailView, ResendEmailVerificationView, ForgotPasswordView,
     ResetPasswordView, VerifyInvitationView, StaffSetupAccountView,
     PatientVerifyInviteView, PatientSetupAccountView,
+    SignMOUView, MOUStatusView,
 )
 from apps.patients.views import (
     PatientListCreateView, PatientDetailView, DashboardStatsView,
@@ -54,6 +55,8 @@ urlpatterns = [
     path('api/auth/staff/setup-account/', StaffSetupAccountView.as_view(), name='staff-setup-account'),
     path('api/auth/patient/verify-invite/', PatientVerifyInviteView.as_view(), name='patient-verify-invite'),
     path('api/auth/patient/setup-account/', PatientSetupAccountView.as_view(), name='patient-setup-account'),
+    path('api/auth/sign-mou/', SignMOUView.as_view(), name='sign-mou'),
+    path('api/auth/mou-status/', MOUStatusView.as_view(), name='mou-status'),
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
 
     # Patients

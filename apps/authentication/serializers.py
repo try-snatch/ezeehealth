@@ -22,8 +22,8 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'mobile', 'doctor_name', 'email', 'role', 'clinic', 'can_view_financial', 'registration_number', 'profile_picture']
-        read_only_fields = ['id', 'mobile', 'role', 'can_view_financial', 'profile_picture']
+        fields = ['id', 'mobile', 'doctor_name', 'email', 'role', 'clinic', 'can_view_financial', 'registration_number', 'profile_picture', 'mou_signed']
+        read_only_fields = ['id', 'mobile', 'role', 'can_view_financial', 'profile_picture', 'mou_signed']
 
     def get_doctor_name(self, obj):
         return f"{obj.first_name} {obj.last_name}".strip()
@@ -221,3 +221,16 @@ class StaffSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+
+class MOUAgreementSerializer(serializers.Serializer):
+    hospital_name = serializers.CharField(max_length=255)
+    authorized_signatory_name = serializers.CharField(max_length=255)
+    hospital_address = serializers.CharField()
+    bank_account_number = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    bank_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    bank_branch = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    bank_ifsc = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    bank_address = serializers.CharField(required=False, allow_blank=True)
+    professional_fee = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    signature = serializers.CharField()  # Base64 PNG data URL

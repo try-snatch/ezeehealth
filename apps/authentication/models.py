@@ -85,6 +85,9 @@ class User(AbstractUser):
     invitation_code = models.CharField(max_length=32, null=True, blank=True, unique=True, db_index=True)
     invitation_sent_at = models.DateTimeField(null=True, blank=True)
 
+    # MOU
+    mou_signed = models.BooleanField(default=False)
+
     # Rate limiting
     last_email_sent_at = models.DateTimeField(null=True, blank=True)
 
@@ -136,3 +139,35 @@ class User(AbstractUser):
             return None
         from apps.patients.s3_utils import generate_profile_picture_url
         return generate_profile_picture_url(self.profile_picture, expiration)
+
+
+class MOUAgreement(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mou_agreements')
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='mou_agreements')
+
+    # MOU version tracking
+    version = models.CharField(max_length=50, default='1.0')
+
+    # Fillable fields from MOU
+    hospital_name = models.CharField(max_length=255)
+    authorized_signatory_name = models.CharField(max_length=255)
+    hospital_address = models.TextField()
+    bank_account_number = models.CharField(max_length=50, blank=True)
+    bank_name = models.CharField(max_length=255, blank=True)
+    bank_branch = models.CharField(max_length=255, blank=True)
+    bank_ifsc = models.CharField(max_length=20, blank=True)
+    bank_address = models.TextField(blank=True)
+    professional_fee = models.CharField(max_length=100, blank=True)
+
+    # Signature
+    signature_s3_key = models.CharField(max_length=500)
+
+    # Metadata
+    signed_at = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-signed_at']
+
+    def __str__(self):
+        return f"MOU v{self.version} - {self.user} - {self.signed_at}"

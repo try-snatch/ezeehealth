@@ -5,11 +5,12 @@ from rest_framework.response import Response
 from django.conf import settings
 from django.core.cache import cache
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import User, Clinic
+from .models import User, Clinic, MOUAgreement
 from .serializers import (
     RegisterSerializer, LoginRequestSerializer, VerifyOTPSerializer, UserSerializer,
     VerifyEmailSerializer, ResendEmailVerificationSerializer, ForgotPasswordSerializer,
-    ResetPasswordSerializer, VerifyInvitationSerializer, StaffSetupSerializer
+    ResetPasswordSerializer, VerifyInvitationSerializer, StaffSetupSerializer,
+    MOUAgreementSerializer,
 )
 from .utils import generate_otp, send_auth_otp
 from .email_utils import (
@@ -792,3 +793,99 @@ class PatientSetupAccountView(views.APIView):
             "otp_required": True,
             "identifier": user.mobile,
         }, status=status.HTTP_200_OK)
+
+
+class SignMOUView(views.APIView):
+    """Submit a signed MOU agreement."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = MOUAgreementSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        data = serializer.validated_data
+
+        # Check if user already signed
+        if user.mou_signed:
+            return Response({"error": "MOU already signed."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not user.clinic:
+            return Response({"error": "User is not associated with a clinic."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Extract and upload signature image from base64 data URL
+        signature_data = data.pop('signature')
+        try:
+            import base64
+            import io
+            from apps.patients.s3_utils import get_s3_client
+            from django.conf import settings as django_settings
+
+            # Parse data URL: "data:image/png;base64,iVBOR..."
+            if ',' in signature_data:
+                header, encoded = signature_data.split(',', 1)
+            else:
+                encoded = signature_data
+
+            image_bytes = base64.b64decode(encoded)
+
+            s3 = get_s3_client()
+            bucket_name = django_settings.AWS_STORAGE_BUCKET_NAME
+            timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+            s3_key = f"mou_signatures/{user.id}/signature_{timestamp}.png"
+
+            s3.upload_fileobj(
+                io.BytesIO(image_bytes),
+                bucket_name,
+                s3_key,
+                ExtraArgs={'ContentType': 'image/png'}
+            )
+        except Exception as e:
+            logger.error("Failed to upload MOU signature for user %s: %s", user.id, e, exc_info=True)
+            return Response({"error": "Failed to upload signature. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Get client IP
+        ip_address = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip() or request.META.get('REMOTE_ADDR')
+
+        # Create MOU record
+        mou = MOUAgreement.objects.create(
+            user=user,
+            clinic=user.clinic,
+            hospital_name=data['hospital_name'],
+            authorized_signatory_name=data['authorized_signatory_name'],
+            hospital_address=data['hospital_address'],
+            bank_account_number=data.get('bank_account_number', ''),
+            bank_name=data.get('bank_name', ''),
+            bank_branch=data.get('bank_branch', ''),
+            bank_ifsc=data.get('bank_ifsc', ''),
+            bank_address=data.get('bank_address', ''),
+            professional_fee=data.get('professional_fee', ''),
+            signature_s3_key=s3_key,
+            ip_address=ip_address,
+        )
+
+        # Mark user as MOU signed
+        user.mou_signed = True
+        user.save(update_fields=['mou_signed'])
+
+        logger.info("MOU signed by user %s (user_id=%s, mou_id=%s)", user.mobile, user.id, mou.id)
+
+        return Response({
+            "message": "MOU signed successfully.",
+            "mou_signed": True,
+            "signed_at": mou.signed_at.isoformat(),
+        }, status=status.HTTP_201_CREATED)
+
+
+class MOUStatusView(views.APIView):
+    """Check MOU signing status for authenticated user."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        latest_mou = user.mou_agreements.first()
+        return Response({
+            "mou_signed": user.mou_signed,
+            "signed_at": latest_mou.signed_at.isoformat() if latest_mou else None,
+        })
