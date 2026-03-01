@@ -183,39 +183,29 @@ class LoginView(views.APIView):
             logger.warning("Login blocked — account pending for '%s' (user_id=%s)", identifier, user.id)
             return Response({"error": "Account not activated. Please check your email for the invitation link."}, status=status.HTTP_403_FORBIDDEN)
 
-        # If user has 2FA enabled => send OTP via MSG91 and return 2fa_required
-        if user.is_2fa_enabled:
-            # rate-limit: prevent OTP flood (simple)
-            last_sent = user.last_otp_sent_at
-            if last_sent and (timezone.now() - last_sent).total_seconds() < 30:
-                return Response({"error": "OTP sent recently. Try after a short while."}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        # Always require OTP — 2FA is mandatory for all users
+        # rate-limit: prevent OTP flood (simple)
+        last_sent = user.last_otp_sent_at
+        if last_sent and (timezone.now() - last_sent).total_seconds() < 30:
+            return Response({"error": "OTP sent recently. Try after a short while."}, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
-            otp = generate_otp()
-            cache_key = f"otp_2fa_{user.id}"
-            cache.set(cache_key, otp, timeout=300)  # 5 minutes expiry
-            logger.debug("Login 2FA OTP for %s: %s", user.mobile, otp)
+        otp = generate_otp()
+        cache_key = f"otp_2fa_{user.id}"
+        cache.set(cache_key, otp, timeout=300)  # 5 minutes expiry
+        logger.debug("Login OTP for %s: %s", user.mobile, otp)
 
-            send_success = send_auth_otp(user.mobile, otp)
+        send_success = send_auth_otp(user.mobile, otp)
 
-            # update last_otp_sent_at so throttling works
-            user.last_otp_sent_at = timezone.now()
-            user.save(update_fields=['last_otp_sent_at'])
+        # update last_otp_sent_at so throttling works
+        user.last_otp_sent_at = timezone.now()
+        user.save(update_fields=['last_otp_sent_at'])
 
-            if send_success:
-                logger.info("Login 2FA OTP sent to %s (user_id=%s)", user.mobile, user.id)
-            else:
-                logger.error("Login 2FA OTP sending FAILED for %s (user_id=%s)", user.mobile, user.id)
+        if send_success:
+            logger.info("Login OTP sent to %s (user_id=%s)", user.mobile, user.id)
+        else:
+            logger.error("Login OTP sending FAILED for %s (user_id=%s)", user.mobile, user.id)
 
-            return Response({"2fa_required": True, "method": "sms", "identifier": user.mobile}, status=status.HTTP_200_OK)
-
-        # No 2FA -> issue tokens
-        logger.info("Login success (no 2FA) for %s (user_id=%s, role=%s)", user.mobile, user.id, user.role)
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            'refresh': str(refresh),
-            'access': str(refresh.access_token),
-            'user': UserSerializer(user).data
-        }, status=status.HTTP_200_OK)
+        return Response({"2fa_required": True, "method": "sms", "identifier": user.mobile}, status=status.HTTP_200_OK)
 
 class VerifyOTPView(views.APIView):
     permission_classes = [permissions.AllowAny]
