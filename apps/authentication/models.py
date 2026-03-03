@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
@@ -161,6 +162,10 @@ class MOUAgreement(models.Model):
 
     # Signature
     signature_s3_key = models.CharField(max_length=500)
+    mou_pdf_s3_key = models.CharField(max_length=500, blank=True)
+
+    # Permanent access token (used for the Zoho-facing redirect URL)
+    view_token = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True)
 
     # Metadata
     signed_at = models.DateTimeField(auto_now_add=True)

@@ -271,6 +271,32 @@ class ZohoService:
             logger.error("Error in create_or_update_doctor: %s", e)
             return None
 
+    @staticmethod
+    def update_doctor_mou(mobile, pdf_url):
+        """Set MOU_Document URL on the Doctor record in Zoho."""
+        try:
+            url_search = f"{API_DOMAIN}/crm/v8/Doctors/search"
+            params = {"criteria": f"(Mobile:equals:'{mobile}')"}
+            headers = ZohoService.get_headers()
+
+            response = requests.get(url_search, headers=headers, params=params, timeout=10)
+            if response.status_code != 200 or not response.json().get("data"):
+                logger.warning("update_doctor_mou: no Zoho Doctor found for mobile %s", mobile)
+                return False
+
+            doctor_id = response.json()["data"][0]["id"]
+            url_update = f"{API_DOMAIN}/crm/v8/Doctors/{doctor_id}"
+            payload = {"data": [{"MOU_Document": pdf_url}]}
+            resp = requests.put(url_update, headers=headers, json=payload, timeout=10)
+            if resp.status_code in [200, 201]:
+                logger.info("MOU_Document synced to Zoho Doctor %s", doctor_id)
+                return True
+            logger.error("update_doctor_mou: Zoho returned %s — %s", resp.status_code, resp.text[:500])
+            return False
+        except Exception as e:
+            logger.error("update_doctor_mou exception for mobile %s: %s", mobile, e)
+            return False
+
     # ==================== LEAD METHODS ====================
 
     @staticmethod

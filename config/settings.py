@@ -21,6 +21,8 @@ DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
+BACKEND_BASE_URL = os.getenv('BACKEND_BASE_URL', 'https://ref.ezeehealth.ai')
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',

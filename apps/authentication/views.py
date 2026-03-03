@@ -795,6 +795,85 @@ class PatientSetupAccountView(views.APIView):
         }, status=status.HTTP_200_OK)
 
 
+def _generate_mou_pdf(data, user, signature_bytes, signed_at, ip_address):
+    """Generate a PDF of the signed MOU using PyMuPDF and return the bytes."""
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)  # A4
+
+    # --- Header ---
+    page.insert_text((50, 50), "MEMORANDUM OF UNDERSTANDING", fontsize=16, fontname="helv", color=(0, 0, 0))
+    page.draw_line((50, 65), (545, 65), color=(0.2, 0.4, 0.8), width=1.5)
+
+    y = 85
+    line_height = 18
+
+    def field(label, value):
+        nonlocal y
+        page.insert_text((50, y), f"{label}:", fontsize=9, fontname="helv", color=(0.4, 0.4, 0.4))
+        page.insert_text((200, y), str(value or '—'), fontsize=9, fontname="helv", color=(0, 0, 0))
+        y += line_height
+
+    def section(title):
+        nonlocal y
+        y += 6
+        page.insert_text((50, y), title, fontsize=10, fontname="helv", color=(0.2, 0.4, 0.8))
+        y += 14
+
+    # Clinic / Doctor info
+    section("PARTY DETAILS")
+    field("Doctor / Clinic", user.clinic.name if user.clinic else '')
+    field("Doctor Name", f"{user.first_name} {user.last_name}".strip())
+    field("Mobile", user.mobile)
+    field("Registration No.", user.registration_number or '')
+
+    # MOU filled fields
+    section("HOSPITAL DETAILS")
+    field("Hospital Name", data.get('hospital_name', ''))
+    field("Authorized Signatory", data.get('authorized_signatory_name', ''))
+
+    # Address — may be multi-line; truncate to single line for simplicity
+    address = str(data.get('hospital_address', '')).replace('\n', ', ')
+    field("Hospital Address", address[:80])
+
+    section("BANKING DETAILS")
+    field("Bank Name", data.get('bank_name', ''))
+    field("Branch", data.get('bank_branch', ''))
+    field("Account Number", data.get('bank_account_number', ''))
+    field("IFSC Code", data.get('bank_ifsc', ''))
+    bank_addr = str(data.get('bank_address', '')).replace('\n', ', ')
+    if bank_addr:
+        field("Bank Address", bank_addr[:80])
+
+    section("COMMERCIAL TERMS")
+    field("Professional Fee", data.get('professional_fee', ''))
+
+    section("SIGNING DETAILS")
+    field("Signed At", signed_at.strftime('%d %b %Y, %H:%M UTC'))
+    field("IP Address", ip_address or '')
+
+    # --- Signature image ---
+    y += 10
+    page.insert_text((50, y), "Signature:", fontsize=9, fontname="helv", color=(0.4, 0.4, 0.4))
+    y += 6
+    try:
+        sig_rect = fitz.Rect(50, y, 250, y + 80)
+        page.insert_image(sig_rect, stream=signature_bytes)
+        y += 90
+    except Exception:
+        page.insert_text((50, y), "[Signature image unavailable]", fontsize=8, color=(0.6, 0.6, 0.6))
+        y += 20
+
+    # --- Footer ---
+    page.draw_line((50, y + 4), (545, y + 4), color=(0.8, 0.8, 0.8), width=0.5)
+    page.insert_text((50, y + 14), "This document was digitally signed via the EzeeHealth platform.", fontsize=7, color=(0.6, 0.6, 0.6))
+
+    pdf_bytes = doc.tobytes()
+    doc.close()
+    return pdf_bytes
+
+
 class SignMOUView(views.APIView):
     """Submit a signed MOU agreement."""
     permission_classes = [permissions.IsAuthenticated]
@@ -848,6 +927,27 @@ class SignMOUView(views.APIView):
         # Get client IP
         ip_address = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip() or request.META.get('REMOTE_ADDR')
 
+        # Generate MOU PDF and upload to S3
+        pdf_s3_key = ''
+        try:
+            pdf_bytes = _generate_mou_pdf(
+                data=data,
+                user=user,
+                signature_bytes=image_bytes,
+                signed_at=timezone.now(),
+                ip_address=ip_address,
+            )
+            pdf_timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+            pdf_s3_key = f"mou_documents/{user.id}/mou_{pdf_timestamp}.pdf"
+            s3.upload_fileobj(
+                io.BytesIO(pdf_bytes),
+                bucket_name,
+                pdf_s3_key,
+                ExtraArgs={'ContentType': 'application/pdf'},
+            )
+        except Exception as e:
+            logger.error("Failed to generate/upload MOU PDF for user %s: %s", user.id, e, exc_info=True)
+
         # Create MOU record
         mou = MOUAgreement.objects.create(
             user=user,
@@ -862,6 +962,7 @@ class SignMOUView(views.APIView):
             bank_address=data.get('bank_address', ''),
             professional_fee=data.get('professional_fee', ''),
             signature_s3_key=s3_key,
+            mou_pdf_s3_key=pdf_s3_key,
             ip_address=ip_address,
         )
 
@@ -870,6 +971,16 @@ class SignMOUView(views.APIView):
         user.save(update_fields=['mou_signed'])
 
         logger.info("MOU signed by user %s (user_id=%s, mou_id=%s)", user.mobile, user.id, mou.id)
+
+        # Sync permanent MOU document URL to Zoho (non-blocking)
+        if pdf_s3_key:
+            try:
+                from django.conf import settings as django_settings
+                base_url = django_settings.BACKEND_BASE_URL.rstrip('/')
+                permanent_url = f"{base_url}/api/auth/mou/{mou.view_token}/"
+                ZohoService.update_doctor_mou(user.mobile, permanent_url)
+            except Exception as e:
+                logger.error("Failed to sync MOU to Zoho for user %s: %s", user.mobile, e)
 
         return Response({
             "message": "MOU signed successfully.",
@@ -889,3 +1000,42 @@ class MOUStatusView(views.APIView):
             "mou_signed": user.mou_signed,
             "signed_at": latest_mou.signed_at.isoformat() if latest_mou else None,
         })
+
+
+class MOUDocumentView(views.APIView):
+    """
+    Public redirect endpoint for MOU PDF access.
+    No login required — the view_token UUID is the credential.
+    Generates a fresh short-lived S3 presigned URL and redirects to it.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, token):
+        from django.http import HttpResponseRedirect, Http404
+        from apps.patients.s3_utils import get_s3_client
+        from django.conf import settings as django_settings
+
+        try:
+            mou = MOUAgreement.objects.get(view_token=token)
+        except MOUAgreement.DoesNotExist:
+            raise Http404
+
+        if not mou.mou_pdf_s3_key:
+            return Response({"error": "MOU document not available."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            s3 = get_s3_client()
+            url = s3.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': django_settings.AWS_STORAGE_BUCKET_NAME,
+                    'Key': mou.mou_pdf_s3_key,
+                    'ResponseContentDisposition': 'inline',
+                    'ResponseContentType': 'application/pdf',
+                },
+                ExpiresIn=3600,  # 1-hour presigned URL, regenerated on each visit
+            )
+            return HttpResponseRedirect(url)
+        except Exception as e:
+            logger.error("MOUDocumentView: failed to generate presigned URL for token %s: %s", token, e)
+            return Response({"error": "Could not retrieve document."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
