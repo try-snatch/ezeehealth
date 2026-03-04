@@ -150,7 +150,31 @@ class PatientDetailView(generics.RetrieveUpdateAPIView):
 
     def partial_update(self, request, *args, **kwargs):
         kwargs['partial'] = True
-        return self.update(request, *args, **kwargs)
+        response = self.update(request, *args, **kwargs)
+
+        # Sync edits to any active Zoho leads for this patient
+        patient = self.get_object()
+        data = request.data
+        zoho_data = {}
+        if 'full_name' in data:
+            zoho_data['Last_Name'] = data['full_name']
+        if 'age' in data:
+            zoho_data['Age'] = data['age']
+        if 'gender' in data:
+            zoho_data['Gender'] = data['gender']
+        if 'phone' in data:
+            zoho_data['Mobile'] = data['phone']
+        if 'diagnosis' in data:
+            zoho_data['Provisional_Diagnosis'] = data['diagnosis']
+
+        if zoho_data:
+            for referral in patient.referrals.filter(zoho_lead_id__isnull=False):
+                try:
+                    ZohoService.update_lead(referral.zoho_lead_id, zoho_data)
+                except Exception as e:
+                    logger.error("Zoho lead sync failed for %s: %s", referral.zoho_lead_id, e)
+
+        return response
 
 
 class UpdateLeadView(views.APIView):
@@ -176,6 +200,31 @@ class UpdateLeadView(views.APIView):
 
         success = ZohoService.update_lead(lead_id, zoho_data)
         if success:
+            # Sync back to the local Patient record
+            referral = Referral.objects.filter(
+                zoho_lead_id=lead_id, clinic=request.user.clinic
+            ).select_related('patient').first()
+            if referral:
+                patient = referral.patient
+                updated_fields = []
+                if 'full_name' in data:
+                    patient.full_name = data['full_name']
+                    updated_fields.append('full_name')
+                if 'age' in data:
+                    patient.age = data['age']
+                    updated_fields.append('age')
+                if 'gender' in data:
+                    patient.gender = data['gender']
+                    updated_fields.append('gender')
+                if 'phone' in data:
+                    patient.phone = data['phone']
+                    updated_fields.append('phone')
+                if 'diagnosis' in data:
+                    patient.diagnosis = data['diagnosis']
+                    updated_fields.append('diagnosis')
+                if updated_fields:
+                    patient.save(update_fields=updated_fields)
+
             return Response({'success': True})
         return Response({'error': 'Failed to update lead in Zoho'}, status=status.HTTP_502_BAD_GATEWAY)
 
