@@ -149,8 +149,13 @@ class PatientDetailView(generics.RetrieveUpdateAPIView):
         return PatientDetailSerializer
 
     def partial_update(self, request, *args, **kwargs):
+        logger.info("PatientDetailView PATCH pk=%s data=%s", kwargs.get('pk'), dict(request.data))
         kwargs['partial'] = True
-        response = self.update(request, *args, **kwargs)
+        try:
+            response = self.update(request, *args, **kwargs)
+        except Exception as e:
+            logger.error("PatientDetailView PATCH validation error: %s", e)
+            raise
 
         # Sync edits to any active Zoho leads for this patient
         patient = self.get_object()
@@ -224,6 +229,16 @@ class UpdateLeadView(views.APIView):
                     updated_fields.append('diagnosis')
                 if updated_fields:
                     patient.save(update_fields=updated_fields)
+
+                # Sync to all OTHER Zoho leads for the same patient
+                other_leads = patient.referrals.filter(
+                    zoho_lead_id__isnull=False
+                ).exclude(zoho_lead_id=lead_id)
+                for other_ref in other_leads:
+                    try:
+                        ZohoService.update_lead(other_ref.zoho_lead_id, zoho_data)
+                    except Exception as e:
+                        logger.error("Zoho lead sync failed for %s: %s", other_ref.zoho_lead_id, e)
 
             return Response({'success': True})
         return Response({'error': 'Failed to update lead in Zoho'}, status=status.HTTP_502_BAD_GATEWAY)
