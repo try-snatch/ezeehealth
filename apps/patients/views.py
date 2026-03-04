@@ -135,17 +135,49 @@ class PatientListCreateView(views.APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class PatientDetailView(generics.RetrieveAPIView):
-    """
-    Retrieve patient/referral details.
-    Note: Patients are read-only after creation for data integrity.
-    """
-    serializer_class = PatientDetailSerializer
+class PatientDetailView(generics.RetrieveUpdateAPIView):
+    """Retrieve or partially update a local (OPD) patient."""
     permission_classes = [IsAuthenticated]
-    queryset = Patient.objects.all()
+    http_method_names = ['get', 'patch', 'head', 'options']
 
     def get_queryset(self):
         return Patient.objects.filter(clinic=self.request.user.clinic)
+
+    def get_serializer_class(self):
+        if self.request.method == 'PATCH':
+            return PatientSerializer
+        return PatientDetailSerializer
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
+
+class UpdateLeadView(views.APIView):
+    """Update a Zoho Lead record (editable fields: name, age, gender, phone, diagnosis)."""
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, lead_id):
+        data = request.data
+        zoho_data = {}
+        if 'full_name' in data:
+            zoho_data['Last_Name'] = data['full_name']
+        if 'age' in data:
+            zoho_data['Age'] = data['age']
+        if 'gender' in data:
+            zoho_data['Gender'] = data['gender']
+        if 'phone' in data:
+            zoho_data['Mobile'] = data['phone']
+        if 'diagnosis' in data:
+            zoho_data['Provisional_Diagnosis'] = data['diagnosis']
+
+        if not zoho_data:
+            return Response({'error': 'No fields to update'}, status=status.HTTP_400_BAD_REQUEST)
+
+        success = ZohoService.update_lead(lead_id, zoho_data)
+        if success:
+            return Response({'success': True})
+        return Response({'error': 'Failed to update lead in Zoho'}, status=status.HTTP_502_BAD_GATEWAY)
 
 
 class OPDPatientRegistrationView(views.APIView):

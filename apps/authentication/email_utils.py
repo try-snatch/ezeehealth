@@ -160,7 +160,7 @@ def send_password_reset_email(email, code, user_name):
                 padding: 20px;
             }}
             .header {{
-                background-color: #DC2626;
+                background-color: #10B981;
                 color: white;
                 padding: 20px;
                 text-align: center;
@@ -174,18 +174,18 @@ def send_password_reset_email(email, code, user_name):
             .code {{
                 font-size: 32px;
                 font-weight: bold;
-                color: #DC2626;
+                color: #10B981;
                 letter-spacing: 8px;
                 text-align: center;
                 padding: 20px;
                 background-color: white;
-                border: 2px dashed #DC2626;
+                border: 2px dashed #10B981;
                 border-radius: 5px;
                 margin: 20px 0;
             }}
             .warning {{
-                background-color: #FEF2F2;
-                border-left: 4px solid #DC2626;
+                background-color: #F0FDF4;
+                border-left: 4px solid #10B981;
                 padding: 10px;
                 margin: 20px 0;
             }}

@@ -19,7 +19,7 @@ from apps.patients.views import (
     PatientDocumentListUploadView, PatientDocumentDetailView,
     PatientDocumentInsightView, ZohoWebhookView, SendPatientInviteView,
     GenerateDocumentUploadLinkView, VerifyDocumentUploadTokenView, DocumentUploadViaTokenView,
-    HospitalListView,
+    HospitalListView, UpdateLeadView,
 )
 from apps.staff.views import StaffListView, StaffDetailView
 
@@ -69,6 +69,7 @@ urlpatterns = [
     path('api/patients/<int:pk>/documents/<uuid:doc_id>/', PatientDocumentDetailView.as_view(), name='patient-document-detail'),
     path('api/patients/<int:pk>/documents/<uuid:doc_id>/insights/', PatientDocumentInsightView.as_view(), name='patient-document-insights'),
     path('api/patients/<int:pk>/send-invite/', SendPatientInviteView.as_view(), name='send-patient-invite'),
+    path('api/patients/leads/<str:lead_id>/', UpdateLeadView.as_view(), name='update-lead'),
     path('api/patients/<int:pk>/document-upload-link/', GenerateDocumentUploadLinkView.as_view(), name='generate-document-upload-link'),
     path('api/document-upload/verify/<str:token>/', VerifyDocumentUploadTokenView.as_view(), name='verify-document-upload-token'),
     path('api/document-upload/<str:token>/', DocumentUploadViaTokenView.as_view(), name='document-upload-via-token'),
