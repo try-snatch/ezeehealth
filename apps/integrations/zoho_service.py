@@ -500,7 +500,7 @@ class ZohoService:
                         "diagnosis": deal.get("Provisional_Diagnosis_3") or deal.get("Description") or "",
                         "revenue": deal.get("Bill_Value", 0),
                         "date": deal.get("Last_Stage_Change_Time") or deal.get("Created_Time") or "",
-                        "hospital": deal.get("Suggested_SSHs") or "",
+                        "hospital": (lambda s: s.get("name") if isinstance(s, dict) else (s or ""))(deal.get("Registered_SSH") or deal.get("Reffered_SSH")),
                         "source": "deal",
                     })
 

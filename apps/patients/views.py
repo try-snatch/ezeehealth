@@ -327,126 +327,102 @@ class DashboardStatsView(views.APIView):
 
         recent_referrals_data = []
         stages_list = []
-        total_converted = 0
 
-        # OPD counts from local DB
-        opd_count = Patient.objects.filter(clinic=user.clinic, status='opd').count()
-        local_referred_count = Patient.objects.filter(clinic=user.clinic, status='referred').count()
+        # OPD = all patients registered with the clinic
+        opd_count = Patient.objects.filter(clinic=user.clinic).count()
 
-        if user.role in ['owner', 'doctor', 'receptionist', 'nurse']:
+        try:
+            primary_user = User.objects.filter(clinic=user.clinic, role='owner').first() or \
+                           User.objects.filter(clinic=user.clinic, role='doctor').first()
+            doc_mobile = primary_user.mobile if primary_user else user.mobile
+
+            # 1. Load Stages
+            headings_order = []
+            formatted_stats = {}
+
             try:
-                primary_user = User.objects.filter(clinic=user.clinic, role='owner').first() or \
-                               User.objects.filter(clinic=user.clinic, role='doctor').first()
-                doc_mobile = primary_user.mobile if primary_user else user.mobile
+                stages_path = Path(settings.BASE_DIR) / 'apps' / 'patients' / 'stages.json'
+                with open(stages_path, 'r') as f:
+                    stages_data = json.load(f)
+                    seen_headings = set()
+                    sorted_stages = sorted(
+                        stages_data.get('stages', []),
+                        key=lambda x: x.get('sequence_number', 0)
+                    )
 
-                # 1. Load Stages
-                headings_order = []
-                formatted_stats = {}
-
-                try:
-                    stages_path = Path(settings.BASE_DIR) / 'apps' / 'patients' / 'stages.json'
-                    with open(stages_path, 'r') as f:
-                        stages_data = json.load(f)
-                        seen_headings = set()
-                        sorted_stages = sorted(
-                            stages_data.get('stages', []),
-                            key=lambda x: x.get('sequence_number', 0)
-                        )
-
-                        for stage in sorted_stages:
-                            h = stage.get('heading')
-                            if h and h not in seen_headings:
-                                headings_order.append(h)
-                                seen_headings.add(h)
-                                formatted_stats[h] = {"count": 0, "latest_date": ""}
-                except Exception as e:
-                        logger.error("Error loading stages.json for dashboard: %s", e)
-
-                # 2. Fetch Deals (converted patients)
-                patients = ZohoService.get_patients(doc_mobile)
-                total_converted = len(patients)
-
-                # 3. Fetch Leads (for referral count and recent referrals)
-                leads = ZohoService.get_leads(doc_mobile)
-                leads.sort(key=lambda x: x.get('date', ''), reverse=True)
-                recent_referrals_data = leads[:5]
-
-                total_referred = total_converted + len(leads)
-
-                # 4. Aggregate counts from Deals
-                total_revenue = 0
-                for p in patients:
-                    status_heading = p.get('status')
-                    patient_date = p.get('date')
-
-                    if status_heading:
-                        if status_heading not in formatted_stats:
-                            formatted_stats[status_heading] = {"count": 0, "latest_date": ""}
-                            headings_order.append(status_heading)
-
-                        if isinstance(formatted_stats[status_heading], int):
-                            formatted_stats[status_heading] = {"count": 0, "latest_date": ""}
-
-                        formatted_stats[status_heading]["count"] += 1
-
-                        if patient_date:
-                            current_latest = formatted_stats[status_heading]["latest_date"]
-                            if not current_latest or patient_date > current_latest:
-                                formatted_stats[status_heading]["latest_date"] = patient_date
-
-                    # print(f"Patients for Dashboard: {patients}")
-
-                    total_revenue += float(p.get('revenue') or 0)
-
-                admitted_val = formatted_stats.get('ADMITTED', 0)
-                total_admitted = admitted_val.get('count', 0) if isinstance(admitted_val, dict) else admitted_val
-
-                overview_stats = {
-                    "total_referred": total_referred,
-                    "total_converted": total_converted,
-                    "total_admitted": total_admitted,
-                    "total_revenue": total_revenue if user.can_view_financial else 0,
-                    "total_opd": opd_count,
-                    "total_local_leads": local_referred_count,
-                }
-
-                colors = ["primary", "warning", "info", "success", "danger", "secondary"]
-                color_idx = 0
-
-                for h in headings_order:
-                    stat = formatted_stats.get(h, {})
-                    stages_list.append({
-                        "title": h,
-                        "value": stat.get('count', 0) if isinstance(stat, dict) else stat,
-                        "latest_date": stat.get('latest_date', '') if isinstance(stat, dict) else '',
-                        "color": colors[color_idx % len(colors)],
-                        "icon": "Activity"
-                    })
-                    color_idx += 1
-
+                    for stage in sorted_stages:
+                        h = stage.get('heading')
+                        if h and h not in seen_headings:
+                            headings_order.append(h)
+                            seen_headings.add(h)
+                            formatted_stats[h] = {"count": 0, "latest_date": ""}
             except Exception as e:
-                logger.error("Error fetching dashboard data from Zoho: %s", e, exc_info=True)
-                overview_stats = {
-                    "total_referred": 0, "total_converted": 0, "total_revenue": 0,
-                    "total_opd": opd_count, "total_local_leads": local_referred_count,
-                }
-                stages_list = []
+                    logger.error("Error loading stages.json for dashboard: %s", e)
 
-        else:
-            local_patients = Patient.objects.filter(clinic=user.clinic)
-            total_referred = local_patients.count()
+            # 2. Fetch Deals and Leads from Zoho
+            patients = ZohoService.get_patients(doc_mobile)
+            leads = ZohoService.get_leads(doc_mobile)
+            leads.sort(key=lambda x: x.get('date', ''), reverse=True)
+            recent_referrals_data = leads[:5]
+
+            # Referrals = all deals + all leads
+            total_referred = len(patients) + len(leads)
+
+            # 3. Aggregate deal counts by stage heading
+            total_revenue = 0
+            for p in patients:
+                status_heading = p.get('status')
+                patient_date = p.get('date')
+
+                if status_heading:
+                    if status_heading not in formatted_stats:
+                        formatted_stats[status_heading] = {"count": 0, "latest_date": ""}
+                        headings_order.append(status_heading)
+
+                    if isinstance(formatted_stats[status_heading], int):
+                        formatted_stats[status_heading] = {"count": 0, "latest_date": ""}
+
+                    formatted_stats[status_heading]["count"] += 1
+
+                    if patient_date:
+                        current_latest = formatted_stats[status_heading]["latest_date"]
+                        if not current_latest or patient_date > current_latest:
+                            formatted_stats[status_heading]["latest_date"] = patient_date
+
+                total_revenue += float(p.get('revenue') or 0)
+
+            # Treated = discharged patients (heading "Discharge" in stages.json)
+            discharge_stat = formatted_stats.get('Discharge', {"count": 0})
+            total_converted = discharge_stat.get('count', 0) if isinstance(discharge_stat, dict) else 0
+
             overview_stats = {
                 "total_referred": total_referred,
-                "total_converted": total_referred,
-                "total_revenue": 0,
+                "total_converted": total_converted,
+                "total_revenue": total_revenue if user.can_view_financial else 0,
                 "total_opd": opd_count,
-                "total_local_leads": local_referred_count,
+            }
+
+            colors = ["primary", "warning", "info", "success", "danger", "secondary"]
+            color_idx = 0
+
+            for h in headings_order:
+                stat = formatted_stats.get(h, {})
+                stages_list.append({
+                    "title": h,
+                    "value": stat.get('count', 0) if isinstance(stat, dict) else stat,
+                    "latest_date": stat.get('latest_date', '') if isinstance(stat, dict) else '',
+                    "color": colors[color_idx % len(colors)],
+                    "icon": "Activity"
+                })
+                color_idx += 1
+
+        except Exception as e:
+            logger.error("Error fetching dashboard data from Zoho: %s", e, exc_info=True)
+            overview_stats = {
+                "total_referred": 0, "total_converted": 0, "total_revenue": 0,
+                "total_opd": opd_count,
             }
             stages_list = []
-
-            recent_referrals = local_patients.order_by('-created_at')[:5]
-            recent_serializer = PatientSerializer(recent_referrals, many=True, context={'request': request})
-            recent_referrals_data = recent_serializer.data
 
         return Response({
             "overview": overview_stats,
