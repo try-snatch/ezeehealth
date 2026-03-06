@@ -102,18 +102,29 @@ class PatientListCreateView(views.APIView):
             except Exception as e:
                 logger.error("Error fetching Zoho Doctor ID: %s", e)
 
+            suggested_ssh = request.data.get('suggested_specialty', '').strip()
             lead_data = {
                 'name': name,
                 'phone': validated_data.get('phone'),
                 'email': validated_data.get('email'),
                 'diagnosis': validated_data.get('diagnosis'),
-                'suggested_specialty': request.data.get('suggested_specialty'),
+                'suggested_sshs': suggested_ssh or None,
                 'age': validated_data.get('age'),
                 'gender': validated_data.get('gender'),
                 'doctor_id': zoho_doctor_id
             }
 
+            logger.info(
+                "CreateReferral: patient=%s clinic=%s diagnosis=%s ssh=%s doctor_id=%s",
+                name,
+                user.clinic,
+                validated_data.get('diagnosis'),
+                suggested_ssh or '(none)',
+                zoho_doctor_id,
+            )
+
             zoho_lead_id = ZohoService.create_lead(lead_data)
+            logger.info("CreateReferral: Zoho lead_id=%s for patient=%s", zoho_lead_id or 'FAILED', name)
 
             if zoho_lead_id:
                 patient = serializer.save(clinic=user.clinic, status='opd')
