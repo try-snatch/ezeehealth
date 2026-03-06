@@ -219,7 +219,7 @@ class UpdateLeadView(views.APIView):
                     patient.age = data['age']
                     updated_fields.append('age')
                 if 'gender' in data:
-                    patient.gender = data['gender']
+                    patient.gender = (data['gender'] or '').lower()
                     updated_fields.append('gender')
                 if 'phone' in data:
                     patient.phone = data['phone']
@@ -951,6 +951,12 @@ class GenerateDocumentUploadLinkView(views.APIView):
         except Patient.DoesNotExist:
             return Response({"error": "Patient not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        if not patient.email and not patient.phone:
+            return Response(
+                {"error": "Patient has no email or phone number. Add contact details before sending an upload link."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         link = DocumentUploadLink.objects.create(
             patient=patient,
             clinic=user.clinic,
@@ -1190,7 +1196,11 @@ class SendPatientInviteView(views.APIView):
         except Patient.DoesNotExist:
             return Response({"error": "Patient not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        invite = _send_patient_invite(patient)
+        try:
+            invite = _send_patient_invite(patient)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
         return Response({
             "message": "Invite sent",
             "invite_code": invite.invitation_code,
@@ -1198,13 +1208,23 @@ class SendPatientInviteView(views.APIView):
 
 
 def _send_patient_invite(patient):
-    """Create PatientInvite and send invitation email. Returns the invite object."""
+    """Create PatientInvite and send invitation via email (preferred) or SMS fallback.
+
+    Raises ValueError if the patient has neither email nor phone — the invite
+    cannot be delivered and should not be created.
+    """
+    if not patient.email and not patient.phone:
+        raise ValueError(
+            f"Patient {patient.id} ({patient.full_name}) has no email or phone number. "
+            "Add contact details before sending an invite."
+        )
+
     from apps.patient_portal.models import PatientInvite
     from apps.authentication.email_utils import generate_invitation_code, send_patient_invitation_email
+    from apps.integrations.msg91_service import MSG91Service
 
     clinic_name = patient.clinic.name if patient.clinic else 'EzeeHealth'
 
-    # Find the referring doctor name from the clinic
     from apps.authentication.models import User as AuthUser
     referring_doctor = AuthUser.objects.filter(
         clinic=patient.clinic, role__in=['owner', 'doctor']
@@ -1232,7 +1252,18 @@ def _send_patient_invite(patient):
             clinic_name=clinic_name,
             referred_by=referred_by,
         )
+        logger.info(f"Patient invite email sent: patient={patient.id} email={patient.email}")
     else:
-        logger.warning(f"Patient {patient.id} has no email — invitation not sent.")
+        # Email not available — fall back to SMS
+        invite_url = f"{settings.PATIENT_PORTAL_URL}/accept-invite/{invite.invitation_code}"
+        sms_message = (
+            f"Hi {patient.full_name}, {referred_by} from {clinic_name} has invited you to "
+            f"EzeeHealth. Set up your patient profile here: {invite_url}"
+        )
+        sms_sent = MSG91Service.send_sms(patient.phone, sms_message)
+        if sms_sent:
+            logger.info(f"Patient invite SMS sent: patient={patient.id} phone={patient.phone}")
+        else:
+            logger.error(f"Patient invite SMS failed: patient={patient.id} phone={patient.phone}")
 
     return invite

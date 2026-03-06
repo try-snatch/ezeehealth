@@ -23,6 +23,13 @@ class PatientSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['clinic', 'created_at', 'status_updated_at']
 
+    def validate(self, data):
+        if not data.get('phone') and not data.get('email'):
+            raise serializers.ValidationError(
+                "At least one of phone number or email is required."
+            )
+        return data
+
     def get_latest_referral(self, obj):
         referral = obj.referrals.first()  # ordered by -referred_date
         if referral:
