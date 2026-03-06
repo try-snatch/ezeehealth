@@ -366,8 +366,24 @@ class CreateReferralView(views.APIView):
         # Get referral details from request (fall back to patient's last referral or base record)
         latest = patient.referrals.first()
         diagnosis = request.data.get('diagnosis') or patient.diagnosis or ''
-        suggested_specialty = request.data.get('suggested_specialty') or (latest.suggested_specialty if latest else '')
-        suggested_sshs = request.data.get('suggested_sshs') or (latest.suggested_sshs if latest else '')
+
+        # Use None-check fallback so an explicitly cleared field (empty string) is respected
+        _ssh_from_request = request.data.get('suggested_sshs')
+        suggested_sshs = (
+            _ssh_from_request.strip()
+            if _ssh_from_request is not None
+            else (latest.suggested_sshs if latest else '')
+        )
+        suggested_specialty = request.data.get('suggested_specialty', '')
+
+        logger.info(
+            "CreateReferral (existing patient): patient=%s (id=%s) clinic=%s diagnosis=%s ssh=%s",
+            patient.full_name,
+            patient.id,
+            user.clinic,
+            diagnosis,
+            suggested_sshs or '(none)',
+        )
 
         if not diagnosis:
             return Response({"error": "Diagnosis is required"}, status=status.HTTP_400_BAD_REQUEST)
