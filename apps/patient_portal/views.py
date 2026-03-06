@@ -518,7 +518,12 @@ class DocumentInsightsView(views.APIView):
 
         insights = doc.insights.all()
         if insights.exists():
-            return Response(DocumentInsightSerializer(insights, many=True).data)
+            data = DocumentInsightSerializer(insights, many=True).data
+            lang = request.query_params.get('lang', 'en')
+            if lang != 'en':
+                from apps.integrations.sarvam_service import translate_insights_list
+                data = translate_insights_list(list(data), lang)
+            return Response(data)
 
         # If no insights yet and AI readable, try generating on-demand
         if doc.ai_readable and doc.ai_processed:
@@ -558,7 +563,12 @@ class CriticalInsightsView(DependantMixin, views.APIView):
             document__in=UploadedDocument.objects.filter(**filters),
             tags__contains=['high'],
         )
-        return Response(DocumentInsightSerializer(insights, many=True).data)
+        data = DocumentInsightSerializer(insights, many=True).data
+        lang = request.query_params.get('lang', 'en')
+        if lang != 'en':
+            from apps.integrations.sarvam_service import translate_insights_list
+            data = translate_insights_list(list(data), lang)
+        return Response(data)
 
 
 class DoctorDocumentsView(views.APIView):

@@ -736,6 +736,10 @@ class PatientDocumentListUploadView(views.APIView):
             patient=patient, clinic=user.clinic
         ).select_related('insight').order_by('-uploaded_at')
 
+        lang = request.query_params.get('lang', 'en')
+        if lang != 'en':
+            from apps.integrations.sarvam_service import translate_insight
+
         data = []
         for doc in docs:
             presigned_url = generate_presigned_url_for_key(doc.s3_key)
@@ -750,6 +754,8 @@ class PatientDocumentListUploadView(views.APIView):
                     'tags': insight.tags,
                     'created_at': insight.created_at.isoformat(),
                 }
+                if lang != 'en':
+                    insight_data = translate_insight(insight_data, lang)
             except PatientDocumentInsight.DoesNotExist:
                 pass
 
@@ -876,14 +882,19 @@ class PatientDocumentInsightView(views.APIView):
         try:
             insight = doc.insight
             self._processing.discard(str(doc.id))
-            return Response({
+            insight_data = {
                 'title': insight.title,
                 'summary': insight.summary,
                 'key_findings': insight.key_findings,
                 'risk_flags': insight.risk_flags,
                 'tags': insight.tags,
                 'created_at': insight.created_at.isoformat(),
-            }, status=status.HTTP_200_OK)
+            }
+            lang = request.query_params.get('lang', 'en')
+            if lang != 'en':
+                from apps.integrations.sarvam_service import translate_insight
+                insight_data = translate_insight(insight_data, lang)
+            return Response(insight_data, status=status.HTTP_200_OK)
         except PatientDocumentInsight.DoesNotExist:
             pass
 

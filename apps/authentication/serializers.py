@@ -19,14 +19,21 @@ class ClinicSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     clinic = ClinicSerializer(required=False)
     doctor_name = serializers.SerializerMethodField()
+    mou_view_token = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'mobile', 'doctor_name', 'email', 'role', 'clinic', 'can_view_financial', 'registration_number', 'profile_picture', 'mou_signed']
-        read_only_fields = ['id', 'mobile', 'role', 'can_view_financial', 'profile_picture', 'mou_signed']
+        fields = ['id', 'mobile', 'doctor_name', 'email', 'role', 'clinic', 'can_view_financial', 'registration_number', 'profile_picture', 'mou_signed', 'mou_view_token']
+        read_only_fields = ['id', 'mobile', 'role', 'can_view_financial', 'profile_picture', 'mou_signed', 'mou_view_token']
 
     def get_doctor_name(self, obj):
         return f"{obj.first_name} {obj.last_name}".strip()
+
+    def get_mou_view_token(self, obj):
+        if not obj.mou_signed:
+            return None
+        latest = obj.mou_agreements.first()
+        return str(latest.view_token) if latest else None
 
     def update(self, instance, validated_data):
         clinic_data = validated_data.pop('clinic', None)
