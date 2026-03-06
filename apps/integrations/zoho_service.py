@@ -311,7 +311,10 @@ class ZohoService:
 
         try:
             url = f"{API_DOMAIN}/crm/v8/Leads/search"
-            params = {"criteria": f"(Doctor_Name.id:equals:{doctor_id})"}
+            params = {
+                "criteria": f"(Doctor_Name.id:equals:{doctor_id})",
+                "fields": "id,Full_Name,First_Name,Last_Name,Mobile,Email,Age,Gender,Provisional_Diagnosis,Description,Suggested_SSHs,Modified_Time,Created_Time",
+            }
 
             headers = ZohoService.get_headers()
             response = requests.get(url, headers=headers, params=params)
@@ -377,13 +380,24 @@ class ZohoService:
                 ]
             }
 
+            logger.info(
+                "create_lead: sending to Zoho — name=%s phone=%s ssh=%s diagnosis=%s",
+                name,
+                lead_data.get('phone'),
+                lead_data.get('suggested_sshs'),
+                lead_data.get('diagnosis'),
+            )
+
             response = requests.post(url, headers=ZohoService.get_headers(), json=payload)
+
+            logger.info("create_lead: Zoho status=%s body=%s", response.status_code, response.text[:500])
 
             if response.status_code in [200, 201]:
                 data = response.json()
                 result = data.get('data', [{}])[0]
                 if result.get('status') == 'success':
                     return result.get('details', {}).get('id')
+                logger.warning("create_lead: Zoho record status=%s details=%s", result.get('status'), result)
             return None
 
         except Exception as e:

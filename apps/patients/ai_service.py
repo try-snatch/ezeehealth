@@ -13,6 +13,25 @@ import time
 
 logger = logging.getLogger(__name__)
 
+INSIGHTS_PROMPT = """\
+Analyze the following medical document and return a JSON object with exactly these fields:
+{
+  "title": "brief document title (string)",
+  "summary": "2-3 sentence summary (string)",
+  "key_findings": ["array of key medical findings (strings)"],
+  "risk_flags": ["array of concerning findings or risk factors (strings)"],
+  "tags": ["severity/priority tags — choose only from: high, medium, low"]
+}
+
+The document may be a text-based report (lab results, prescriptions, discharge summaries) or a
+description of medical imaging (X-ray, CT, MRI, ultrasound, ECG). Analyze whatever content is
+provided and extract meaningful medical insights.
+
+Document text:
+{document_text}
+
+Return only valid JSON with no markdown fences or extra text."""
+
 
 def _gemini_generate_with_retry(client, max_retries=3, **kwargs):
     """Call client.models.generate_content with exponential backoff on 503/429."""
@@ -241,23 +260,7 @@ def generate_insights(doc_id, patient_id):
         full_text = '\n'.join([m['meta'].get('text', '') for m in sorted_matches])
 
         client = _get_genai_client()
-        prompt = f"""Analyze the following medical document and return a JSON object with exactly these fields:
-{{
-  "title": "brief document title (string)",
-  "summary": "2-3 sentence summary (string)",
-  "key_findings": ["array of key medical findings (strings)"],
-  "risk_flags": ["array of concerning findings or risk factors (strings)"],
-  "tags": ["severity/priority tags — choose only from: high, medium, low"]
-}}
-
-The document may be a text-based report (lab results, prescriptions, discharge summaries) or a
-description of medical imaging (X-ray, CT, MRI, ultrasound, ECG). Analyze whatever content is
-provided and extract meaningful medical insights.
-
-Document text:
-{full_text[:15000]}
-
-Return only valid JSON with no markdown fences or extra text."""
+        prompt = INSIGHTS_PROMPT.format(document_text=full_text[:15000])
 
         response = _gemini_generate_with_retry(
             client,
