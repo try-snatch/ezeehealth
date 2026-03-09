@@ -231,8 +231,9 @@ class VerifyOTPView(views.APIView):
             logger.warning("OTP verify — user not found for identifier '%s'", identifier)
             return Response({"error": "User not found. Please Register"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Development bypass (existing)
-        if otp == "123456" and getattr(settings, 'DEBUG', False):
+        # Google review test account bypass
+        REVIEW_ACCOUNT_EMAIL = 'z92lqst553@wnbaldwy.com'
+        if otp == "123456" and (getattr(settings, 'DEBUG', False) or user.email == REVIEW_ACCOUNT_EMAIL):
             cached_otp = "123456"
         else:
             cached_otp = cache.get(f"otp_2fa_{user.id}")
