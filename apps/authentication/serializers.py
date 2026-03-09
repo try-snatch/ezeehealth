@@ -239,5 +239,5 @@ class MOUAgreementSerializer(serializers.Serializer):
     bank_branch = serializers.CharField(max_length=255)
     bank_ifsc = serializers.CharField(max_length=20)
     bank_address = serializers.CharField()
-    professional_fee = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    professional_fee = serializers.CharField(max_length=100)
     signature = serializers.CharField()  # Base64 PNG data URL
