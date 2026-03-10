@@ -15,13 +15,13 @@ logger = logging.getLogger(__name__)
 
 INSIGHTS_PROMPT = """\
 Analyze the following medical document and return a JSON object with exactly these fields:
-{
+{{
   "title": "brief document title (string)",
   "summary": "2-3 sentence summary (string)",
   "key_findings": ["array of key medical findings (strings)"],
   "risk_flags": ["array of concerning findings or risk factors (strings)"],
   "tags": ["severity/priority tags — choose only from: high, medium, low"]
-}
+}}
 
 The document may be a text-based report (lab results, prescriptions, discharge summaries) or a
 description of medical imaging (X-ray, CT, MRI, ultrasound, ECG). Analyze whatever content is
