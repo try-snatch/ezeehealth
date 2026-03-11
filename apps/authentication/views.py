@@ -840,13 +840,16 @@ def _generate_mou_pdf(data, user, signature_bytes, signed_at, ip_address):
 body  {{ font-family: serif; font-size: 10pt; line-height: 1.6; color: #000; }}
 h1   {{ font-size: 13pt; font-weight: bold; text-align: center; text-decoration: underline; margin: 0 0 10pt 0; }}
 .hd  {{ font-weight: bold; margin-top: 10pt; margin-bottom: 2pt; }}
+.shd {{ font-weight: bold; margin-top: 8pt; margin-bottom: 2pt; }}
 p    {{ margin: 4pt 0; text-align: justify; }}
 .ctr {{ text-align: center; }}
-ul   {{ margin: 3pt 0 3pt 0; padding-left: 18pt; }}
-li   {{ margin: 2pt 0; }}
+.ind {{ margin-left: 18pt; }}
+.ind2 {{ margin-left: 36pt; }}
 table{{ width: 100%; border-collapse: collapse; margin: 6pt 0; }}
 td, th {{ border: 1px solid #000; padding: 3pt 6pt; font-size: 9.5pt; }}
 th   {{ font-weight: bold; text-align: center; background-color: #f0f0f0; }}
+ol   {{ margin: 3pt 0 3pt 0; padding-left: 18pt; }}
+li   {{ margin: 2pt 0; }}
 </style></head><body>
 
 <h1>Memorandum of Understanding</h1>
@@ -870,39 +873,43 @@ registered office at {address} (Hereinafter referred as <b>&#34;{hosp}&#34;</b>)
 the &#34;<b>Parties</b>&#34;)</p>
 
 <p class="hd">WHEREAS:</p>
-<p>Ezeehealth (Dual Mirror Healthcare Pvt Ltd) is a digitally enabled platform for Doctors and
+<p><b>A.</b> Ezeehealth (Dual Mirror Healthcare Pvt Ltd) is a digitally enabled platform for Doctors and
 Patients. It has a network of Specialty Hospitals. It has a complete ecosystem to handhold
 Patient&#8217;s journey; and in addition digitally enable the Primary doctors/Hospitals to remain a
 part of their patient&#8217;s journey of treatment through their specialty treatment.</p>
-<p>In order to enable it&#8217;s patients to avail specialty treatment <b>Ezeehealth (EH)</b> and
+<p><b>B.</b> In order to enable it&#8217;s patients to avail specialty treatment <b>Ezeehealth (EH)</b> and
 <b>&#34;{hosp}&#34;</b> have agreed to enter into this Agreement wherein <b>Ezeehealth (EH)</b> platform
 and Patient concierge services shall be made available to {hosp}.</p>
 
 <p><b>NOW THESE PRESENTS WITNESSETH AND IT IS HEREBY AGREED, DECLARED AND CONFIRMED BY AND
 BETWEEN THE PARTIES HERETO AS UNDER</b></p>
 
-<p class="hd">PURPOSE OF THIS AGREEMENT</p>
+<p class="hd">1. PURPOSE OF THIS AGREEMENT</p>
 <p>The Ezeehealth shall provide its platform and concierge services to the patients of
 <b>&#34;{hosp}&#34;</b> to avail specialty medical treatment. EH shall not be responsible for clinical
 decisions, medical outcomes, or any treatment administered by the Hospital.</p>
 
-<p class="hd">TERM</p>
+<p class="hd">2. TERM</p>
 <p>This Agreement shall be effective from <b>{date_str}</b> and shall remain in force till
 <b>{end_date_str}</b>. It is hereby agreed that on the expiry of this period, the Parties shall
 have the option to renew this Agreement for further period and on the terms and conditions as
 mutually agreed to between the Parties at the time of renewal. Renewal terms, including fee
 structure, shall be mutually agreed in writing.</p>
 
-<p class="hd">PAYMENT TERMS</p>
-<p>For the Patients of <b>{hosp}</b>:</p>
-<p>Ezeehealth will collect the Fee on behalf of <b>{hosp}</b> for providing distinct clinical
+<p class="hd">3. PAYMENT TERMS</p>
+
+<p class="ind"><b>a.</b> For the Patients of <b>{hosp}</b>:</p>
+
+<p class="ind2"><b>i.</b> Ezeehealth will collect the Fee on behalf of <b>{hosp}</b> for providing distinct clinical
 services as stated in Appendix A of this MOU. This fee to be paid to {hosp} will be as per the
 Professional fee Disclosure form in the <b>Appendix C</b> of this MOU.</p>
-<p>The Tertiary healthcare treatment would be provided by any of the partner Specialty hospital
+
+<p class="ind2"><b>ii.</b> The Tertiary healthcare treatment would be provided by any of the partner Specialty hospital
 (&#8216;Tertiary Hospital&#8217;) of <b>Ezeehealth (EH)</b> to this patient. The decision regarding the
 choice of Tertiary Hospital will be strictly under the purview of {hosp}; wherein Ezeehealth as
 a platform will have no say in this matter.</p>
-<p>The Parties expressly agree that the Fee payable to <b>{hosp}</b> is a primary obligation of the
+
+<p class="ind2"><b>iii.</b> The Parties expressly agree that the Fee payable to <b>{hosp}</b> is a primary obligation of the
 Tertiary Hospital and is not a consideration payable by Ezeehealth. Ezeehealth shall solely act
 as a &#8216;pure agent&#8217; of Tertiary Hospital, as defined under Rule 33 of the Central Goods and
 Services Tax Rules, 2017, for the limited purpose of collection and remittance of the
@@ -910,65 +917,68 @@ Services Tax Rules, 2017, for the limited purpose of collection and remittance o
 interest or beneficial ownership in &#8216;distinct clinical services&#8217; and shall neither be treated
 as the recipient of such services. Further, Ezeehealth shall not markup, retain or modify the
 &#8216;Fee&#8217; for &#8216;distinct clinical services&#8217; in any manner and shall remit the same to {hosp}.</p>
-<p>The Fee to <b>{hosp}</b> is for &#8216;distinct clinical services&#8217; only and does not constitute a
+
+<p class="ind"><b>b.</b> The Fee to <b>{hosp}</b> is for &#8216;distinct clinical services&#8217; only and does not constitute a
 referral commission, in line with the Medical Council of India (Professional Conduct, Etiquette
 and Ethics) Regulations, 2002</p>
-<p><b>Applicable taxes (including GST)</b> shall be levied and paid as per Indian law</p>
-<p><b>Bank details of the {hosp} is as follows:</b><br/>
+
+<p class="ind"><b>c.</b> <b>Applicable taxes (including GST)</b> shall be levied and paid as per Indian law</p>
+
+<p class="ind"><b>d.</b> <b>Bank details of the {hosp} is as follows:</b><br/>
 <b>Bank Account number:</b> {bank_acct}<br/>
 <b>Bank Name:</b> {bank_name}<br/>
 <b>Branch:</b> {bank_branch}<br/>
 <b>IFS code:</b> {bank_ifsc}<br/>
 <b>Address:</b> {bank_addr}</p>
 
-<p class="hd">CONFIDENTIALITY</p>
+<p class="hd">4. CONFIDENTIALITY</p>
 <p>Both Parties shall keep confidential all proprietary information, including patient records,
 treatment details and business data. Exceptions apply only where disclosure is required by law
 or regulatory authorities. Both parties shall comply with the Digital Personal Data Protection
 Act, 2023.</p>
 
-<p class="hd">BRANDING</p>
+<p class="hd">5. BRANDING</p>
 <p>Either party will be allowed to use the other party&#8217;s logo on social media or offices during
 the period of this agreement.</p>
 
-<p class="hd">TERMINATION</p>
+<p class="hd">6. TERMINATION</p>
 <p>Either Party may terminate this Agreement with 90 (ninety) days written notice. Upon
 termination: Pending dues shall be settled. Each Party shall return confidential materials.
 Patient services already in process shall be completed in good faith. All patient cases under
 active treatment shall be completed without EH incurring additional liability.</p>
 
-<p class="hd">FORCE MAJEURE</p>
+<p class="hd">7. FORCE MAJEURE</p>
 <p>Neither Party shall be liable for failure to perform obligations due to events beyond their
 reasonable control (including pandemics, natural disasters or government restrictions).</p>
 
-<p class="hd">INDEMNITY</p>
+<p class="hd">8. INDEMNITY</p>
 <p>EH shall indemnify the Hospital only for direct losses arising solely from EH&#8217;s proven breach
 of this Agreement, and not for actions or omissions of the Hospital. No indemnity shall apply
 to medical negligence or clinical errors by the Hospital.</p>
 
-<p class="hd">LIMITATION OF LIABILITY</p>
+<p class="hd">9. LIMITATION OF LIABILITY</p>
 <p>Neither Party shall be liable for indirect or consequential damages. Ezeehealth&#8217;s liability
 shall not exceed the total service fees received under this Agreement in the preceding
 12 months.</p>
 
-<p class="hd">DISPUTE RESOLUTION</p>
+<p class="hd">10. DISPUTE RESOLUTION</p>
 <p>Any dispute shall be resolved by arbitration under the Arbitration and Conciliation Act, 1996.
 The seat of arbitration shall be Bengaluru, Karnataka, and the language shall be English.
 Courts at Bengaluru shall have exclusive jurisdiction.</p>
 
-<p class="hd">AUTHORIZATION</p>
+<p class="hd">11. AUTHORIZATION</p>
 <p>All regulatory authorizations, approvals, registrations, etc. required by the
 <b>&#34;{hosp}&#34;</b> and the <b>Ezeehealth (EH)</b> to enable it to carry on its business as it is being
 carried on from time to time and to lawfully enter into this Agreement and comply with its
 obligations under this Agreement have been obtained or effected and are in full force and
 effect.</p>
 
-<p class="hd">NOTICES</p>
+<p class="hd">12. NOTICES</p>
 <p>All notices to any Party shall be in writing properly addressed to the registered office of the
 Party, or to such other addresses as may be provided from time to time by the Party, by
 registered mail or courier or through digital medium like email to a registered email id.</p>
 
-<p class="hd">SEVERABILITY</p>
+<p class="hd">13. SEVERABILITY</p>
 <p>The illegality, invalidity or unenforceability or any provision of this Agreement shall not be
 deemed to prejudice the enforceability of the remainder of this Agreement, which shall be
 severable there from unless such illegality or invalidity of such part is material to this
@@ -989,9 +999,9 @@ through its authorized representative<br/>
 <p>Signature:</p>
 <img src="data:image/png;base64,{sig_b64}" width="180" height="65"/>
 
-<p class="hd">Appendix A</p>
-<p class="hd">Distinct Clinical Services</p>
-<ul>
+<p class="hd ctr">Appendix A</p>
+<p class="hd ctr">Distinct Clinical Services</p>
+<ol>
 <li><b>Pre-Admission Clinical Optimization:</b> Formulating a treatment plan, stabilizing the
 patient for transport, or conducting pre-operative assessments required by the receiving
 hospital.</li>
@@ -1001,39 +1011,39 @@ progress, adjust medications, or coordinate with the Tertiary Hospital&#8217;s i
 post-op care, wound management, or long-term medication titration</li>
 <li><b>Emergency Stabilization:</b> Providing immediate life-saving care before or during the
 transfer to a tertiary center.</li>
-</ul>
+</ol>
 
-<p class="hd">Appendix B</p>
-<p class="hd">EZEEHEALTH RESPONSIBILITIES AND UNDERTAKINGS</p>
-<p>Ezeehealth shall provide <b>&#34;{hosp}&#34;</b> a digital platform, patient concierge services and
+<p class="hd ctr">Appendix B</p>
+<p class="hd ctr">EZEEHEALTH RESPONSIBILITIES AND UNDERTAKINGS</p>
+
+<p class="ind"><b>a.</b> Ezeehealth shall provide <b>&#34;{hosp}&#34;</b> a digital platform, patient concierge services and
 it&#8217;s ecosystem of Co-managing Hospitals, processes and back-end support for</p>
-<ul>
-<li>Receiving a patient needing specialized treatment</li>
-<li>Sending a patient needing specialized treatment</li>
-<li>Handholding of such Patients during their treatment</li>
-<li>Updates on the status of a patient under treatment</li>
-</ul>
-<p>The Ezeehealth&#8217;s team with digitally enabled processes will follow-up with the patients and
+<p class="ind2"><b>i.</b> Receiving a patient needing specialized treatment</p>
+<p class="ind2"><b>ii.</b> Sending a patient needing specialized treatment</p>
+<p class="ind2"><b>iii.</b> Handholding of such Patients during their treatment</p>
+<p class="ind2"><b>iv.</b> Updates on the status of a patient under treatment</p>
+
+<p class="ind"><b>b.</b> The Ezeehealth&#8217;s team with digitally enabled processes will follow-up with the patients and
 all concerned to ensure that</p>
-<ul>
-<li>Patient&#8217;s journey is hassle free</li>
-<li>There is transparency in the treatment process along with continuous updates</li>
-<li>All concerned with the co-management of the treatment are kept in the loop so that patients
-experience seamless care</li>
-</ul>
-<p>Ezeehealth shall provide complete assistance through its Backend team to the
+<p class="ind2"><b>i.</b> Patient&#8217;s journey is hassle free</p>
+<p class="ind2"><b>ii.</b> There is transparency in the treatment process along with continuous updates</p>
+<p class="ind2"><b>iii.</b> All concerned with the co-management of the treatment are kept in the loop so that patients
+experience seamless care</p>
+
+<p class="ind">Ezeehealth shall provide complete assistance through its Backend team to the
 <b>&#34;{hosp}&#34;</b> in their billing process.</p>
-<p>The <b>&#34;{hosp}&#34;</b> shall permit the officers and representatives of the
+<p class="ind">The <b>&#34;{hosp}&#34;</b> shall permit the officers and representatives of the
 <b>Ezeehealth (EH)</b> during business hours, to enter upon the <b>&#34;{hosp}&#34;</b> office or hospital
 and work in hospital premise (area provided by <b>&#34;{hosp}&#34;</b>).</p>
-<p>If a case (episode) is brought through Ezeehealth platform or its representative, the patient
+
+<p class="ind"><b>c.</b> If a case (episode) is brought through Ezeehealth platform or its representative, the patient
 will be considered as Ezeehealth&#8217;s patient irrespective of the patients having a prior
 hospital&#8217;s UHID from previous visits.</p>
-<p>Ezeehealth shall not be liable for delays, failures, or actions of the Hospital or its staff
+<p class="ind"><b>d.</b> Ezeehealth shall not be liable for delays, failures, or actions of the Hospital or its staff
 and does not provide medical advice, diagnosis, or treatment.</p>
 
-<p class="hd">Appendix C</p>
-<p class="hd">PROFESSIONAL FEE DISCLOSURE FORM</p>
+<p class="hd ctr">Appendix C</p>
+<p class="hd ctr">PROFESSIONAL FEE DISCLOSURE FORM</p>
 <table>
 <tr><th>Sl. No.</th><th>Particulars</th><th>Amount</th></tr>
 <tr>
