@@ -41,6 +41,11 @@ urlpatterns = [
          TemplateView.as_view(template_name='document_upload/index.html'),
          name='document-upload-page'),
 
+    # Account Deletion Page (for Google Play Store compliance)
+    path('account/delete/',
+         TemplateView.as_view(template_name='account_deletion/index.html'),
+         name='account-deletion'),
+
     # Auth
     path('api/auth/register/', RegisterView.as_view(), name='register'),
     path('api/auth/resend-registration-otp/', ResendRegistrationOTPView.as_view(), name='resend-registration-otp'),
