@@ -88,14 +88,20 @@ def delete_patient_document(patient_id, filename):
         logger.error(f"Error deleting from S3: {e}")
         return False
 
-def generate_presigned_url_for_key(s3_key, expiration=3600):
-    """Generates a presigned URL for an S3 object given its full key."""
+def generate_presigned_url_for_key(s3_key, expiration=3600, inline=False):
+    """Generates a presigned URL for an S3 object given its full key.
+    If inline=True, sets Content-Disposition to inline so the browser
+    renders the file instead of downloading it.
+    """
     s3 = get_s3_client()
     bucket_name = settings.AWS_STORAGE_BUCKET_NAME
+    params = {'Bucket': bucket_name, 'Key': s3_key}
+    if inline:
+        params['ResponseContentDisposition'] = 'inline'
     try:
         response = s3.generate_presigned_url(
             'get_object',
-            Params={'Bucket': bucket_name, 'Key': s3_key},
+            Params=params,
             ExpiresIn=expiration
         )
         return response

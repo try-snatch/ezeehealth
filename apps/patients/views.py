@@ -770,6 +770,7 @@ class PatientDocumentListUploadView(views.APIView):
         data = []
         for doc in docs:
             presigned_url = generate_presigned_url_for_key(doc.s3_key)
+            view_url = generate_presigned_url_for_key(doc.s3_key, inline=True)
             insight_data = None
             try:
                 insight = doc.insight
@@ -795,6 +796,7 @@ class PatientDocumentListUploadView(views.APIView):
                 'uploaded_at': doc.uploaded_at.isoformat(),
                 'ai_processed': doc.ai_processed,
                 'presigned_url': presigned_url,
+                'view_url': view_url,
                 'insight': insight_data,
             })
 
